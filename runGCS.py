@@ -32,9 +32,10 @@ for aPair in allFiles:
     rd = sunpy.map.Map(my_map2 - my_map1.quantity)
     diffMaps.append(rd)
 
-
-ns =[3,10,31]      
-#ns =[5,20,50]      
+# Number of points in the wireframe
+# [nleg, ncircle, naxis]
+#ns =[3,10,31]      
+ns =[5,20,50]      
 
 
 # Pass everything to the GUI -------------------------------------------|
