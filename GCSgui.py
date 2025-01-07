@@ -18,6 +18,7 @@ global CMElat, CMElon, CMEtilt, height, k, ang, satpos
 
 # |------ Things to potentially improve ------|
 # Need to test with LASCO (and COR1?)
+# Check CROTA always zero for the fits? Rotate if not
 # Currently hardcoded for occulter of 2.5 Rs (can set in occultR = in call to pts2proj)
 # Add white circle for edge of Sun
 # Make image scl mode for each panel so can use diff ones at same time?
