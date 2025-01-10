@@ -107,17 +107,17 @@ class Ui_MainWindow(object):
         self.graphWidget1 = pg.PlotWidget(self.centralwidget)
         self.graphWidget1.setGeometry(QtCore.QRect(220, ypos, wsize, wsize))
         self.labelSat1 = QtWidgets.QLabel(self.centralwidget)
-        self.labelSat1.setGeometry(QtCore.QRect(220, 20, 150, 16))
+        self.labelSat1.setGeometry(QtCore.QRect(220, 20, 300, 16))
         if nSats >=2:
             self.graphWidget2 = pg.PlotWidget(self.centralwidget)
             self.graphWidget2.setGeometry(QtCore.QRect(230+wsize, ypos, wsize, wsize))
             self.labelSat2 = QtWidgets.QLabel(self.centralwidget)
-            self.labelSat2.setGeometry(QtCore.QRect(230+wsize, 20, 150, 16))
+            self.labelSat2.setGeometry(QtCore.QRect(230+wsize, 20, 300, 16))
         if nSats == 3:
             self.graphWidget3 = pg.PlotWidget(self.centralwidget)
             self.graphWidget3.setGeometry(QtCore.QRect(240+2*wsize, ypos, wsize, wsize))
             self.labelSat3 = QtWidgets.QLabel(self.centralwidget)
-            self.labelSat3.setGeometry(QtCore.QRect(240+2*wsize, 20, 150, 16))
+            self.labelSat3.setGeometry(QtCore.QRect(240+2*wsize, 20, 300, 16))
 
         # Set up the individual sliders, their text boxes, and their labels -------------|
         # GCS shell parameters here
@@ -163,12 +163,12 @@ class Ui_MainWindow(object):
         self.sliderTilt.setOrientation(QtCore.Qt.Horizontal)
         self.sliderTilt.setMinimum(-90)
         self.sliderTilt.setMaximum(90) 
-        self.sliderTilt.setValue(10)                       
+        self.sliderTilt.setValue(0)                       
         self.label_3 = QtWidgets.QLabel(self.centralwidget)
         self.label_3.setGeometry(QtCore.QRect(30, 160, 71, 16))
         self.leTilt = QtWidgets.QLineEdit(self.centralwidget)
         self.leTilt.setGeometry(QtCore.QRect(30, 180, 113, 21))
-        self.leTilt.setText('10')        
+        self.leTilt.setText('0')        
         # Height
         self.sliderHeight = QtWidgets.QSlider(self.centralwidget)
         self.sliderHeight.setGeometry(QtCore.QRect(30, 270, 160, 22))
@@ -311,7 +311,7 @@ class Ui_MainWindow(object):
 class mywindow(QtWidgets.QMainWindow):
     # This takes the generic but properly labeled window and adapts it to ---------------| 
     # our specific needs
-    def __init__(self, diffMapsIn, nsIn=[5,20,30], scl2ints=1e13):
+    def __init__(self, diffMapsIn, nsIn=[5,20,30]):
         # Set up globals for the number of sats, plotranges, original images
         # the actual images displayed in the GUI, and the wireframe point density
         global nSats, plotranges, imgOrig, imgOut, ns, diffMaps
@@ -321,6 +321,7 @@ class mywindow(QtWidgets.QMainWindow):
         imgOrig = []
         imgOut  = []
         for i in range(nSats):
+            scl2ints = 100/np.median(np.abs(diffMaps[i].data))
             thisIm = diffMaps[i].data * scl2ints
             imgOrig.append(np.transpose(thisIm))
             imgOut.append(np.transpose(thisIm))
@@ -341,12 +342,26 @@ class mywindow(QtWidgets.QMainWindow):
         # -------------------------------------------------------------------------------|            
         # Give nice titles (sat+instr) to each plot -------------------------------------|
         for i in range(nSats):
+            myhdr = diffMaps[i].meta
+            myScope = myhdr['telescop']
+            if myScope == 'STEREO':
+                mySat = myhdr['obsrvtry'] + ' ' + myhdr['instrume'] + ' ' + myhdr['detector']
+                myDate = myhdr['date-avg']
+            if myScope == 'SOHO':
+                mySat = myhdr['telescop']  + ' '+ myhdr['instrume'] + ' ' + myhdr['detector']
+                myDate = myhdr['date-obs'].replace('/','-')+'T'+myhdr['time-obs']
+            
+            #myDate = myhdr['date']
+            # take off decimal secs
+            dotIdx = myDate.find('.')
+            myDate = myDate[:dotIdx]
+            myName = mySat + ' ' + myDate
             if i == 0:
-                self.ui.labelSat1.setText(diffMaps[0].latex_name)
+                self.ui.labelSat1.setText(myName)
             if i == 1:
-                self.ui.labelSat2.setText(diffMaps[1].latex_name)              
+                self.ui.labelSat2.setText(myName)              
             if i == 2:
-                self.ui.labelSat3.setText(diffMaps[2].latex_name)
+                self.ui.labelSat3.setText(myName)
                                 
         # -------------------------------------------------------------------------------|            
         # Make a mask for the occulter and outside circular FOV -------------------------|
@@ -409,6 +424,7 @@ class mywindow(QtWidgets.QMainWindow):
             Elon -= 360.
         if Elon < -180:
             Elon += 360.
+        Elon = float('{:.2f}'.format(Elon))
         
         
         # -------------------------------------------------------------------------------|            
@@ -498,7 +514,7 @@ class mywindow(QtWidgets.QMainWindow):
         # widgets (with appropriate levels)
         for i in range(nSats):   
             # !!!! add back in mask             
-            #imgOut[i][np.where(masks[i] == 1)] = np.min(imgOut[i])
+            '''imgOut[i][np.where(masks[i] == 1)] = np.min(imgOut[i])'''
             images[i].setImage(imgOut[i], levels=minmaxes[i])
 
         # -------------------------------------------------------------------------------|            
@@ -544,19 +560,26 @@ class mywindow(QtWidgets.QMainWindow):
     
     def swapLonSys(self):
         global isStony, CMElon, Elon
-        val = self.ui.sliderLon.value()
-        if isStony: # was in stony, converting to carr
+        val = float(self.ui.leLon.text())
+        isStony = self.ui.stonyBut.isChecked()  
+        if not isStony: # convert from stony to carr
             newval = val + Elon
             #self.ui.sliderLon.setValue(int(newval))
-        else: # was in carr, converting to stony
+        else: # convert from carr to stony
             newval = val - Elon
         if newval > 180:
             newval -= 360
         elif newval < -180:
             newval += 360
         self.ui.sliderLon.setValue(int(newval))
-        isStony = self.ui.stonyBut.isChecked()
-    
+        self.ui.leLon.setText('{:.2f}'.format(newval))
+        if isStony:
+            CMElon = val - Elon
+        else:
+            CMElon = val 
+        data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])
+          
 
     # -----------------------------------------------------------------------------------|            
     def resetBrights(self, minmaxes): #--------------------------------------------------|
@@ -597,7 +620,7 @@ class mywindow(QtWidgets.QMainWindow):
         if idx==2:
             sls = [self.ui.slSat3low, self.ui.slSat3hi]    
             les = [self.ui.leSat3low, self.ui.leSat3hi]    
-        # Reset things                 
+        # Reset things                
         sls[0].setMinimum(int(slLow))
         sls[0].setMaximum(int(slHigh))
         sls[1].setMinimum(int(slLow))
@@ -654,7 +677,22 @@ class mywindow(QtWidgets.QMainWindow):
     def saveParams(self): #--------------------------------------------------------------|
         print('Saving output in GCSvals.txt')
         f1 = open('GCSvals.txt', 'w')
-        f1.write('Lon:     '+self.ui.leLon.text()+'\n')
+        if isStony:
+            f1.write('Stony Lon:     '+self.ui.leLon.text()+'\n')
+            carLon = float(self.ui.leLon.text()) + Elon
+            if carLon > 180:
+                carLon -= 360.
+            if carLon < -180:
+                carLon += 360
+            f1.write('Carr Lon:     '+'{:.2f}'.format(carLon) +'\n')
+        else:    
+            stoLon = float(self.ui.leLon.text()) - Elon
+            if stoLon > 180:
+                stoLon -= 360.
+            if stoLon < -180:
+                stoLon += 360
+            f1.write('Stony Lon:     '+'{:.2f}'.format(stoLon) +'\n')
+            f1.write('Carr Lon:     '+self.ui.leLon.text() +'\n')
         f1.write('Lat:     '+self.ui.leLat.text()+'\n')
         f1.write('Tilt:    '+self.ui.leTilt.text()+'\n')
         f1.write('Height:  '+self.ui.leHeight.text()+'\n')
@@ -697,16 +735,20 @@ class mywindow(QtWidgets.QMainWindow):
         pixCloud = []
         obs = [diffMap.observer_coordinate.lat.deg, diffMap.observer_coordinate.lon.deg, diffMap.observer_coordinate.radius.m]
         obsScl = [diffMap.scale[0].to_value(), diffMap.scale[1].to_value()]  # arcsec/pix
-        skyPt = SkyCoord(0*u.deg, 0*u.deg, 0*u.solRad,frame="heliographic_stonyhurst", obstime=diffMap.date) 
+        skyPt = SkyCoord(diffMap.observer_coordinate.lon, 0*u.deg, 0*u.solRad,frame="heliographic_stonyhurst", obstime=diffMap.date) 
         cent = diffMap.wcs.world_to_pixel(skyPt)
-        
+        #print (cent)
+        #refP = diffMap.reference_pixel
+        #print (refP.x.to_value()-diffMap.reference_coordinate.Tx.to_value()/obsScl[0], refP.y.to_value()-diffMap.reference_coordinate.Ty.to_value()/obsScl[1])
+
         # Can probably unpack this, built pts2proj for arrays
         for pt in data:
             # Old version, new fast matches within ~ 1 pix
+            # Keepin in here to validate against as needed
             #skyPt = SkyCoord(x=pt[0], y=pt[1], z=pt[2], unit='R_sun', representation_type='cartesian', frame='heliographic_stonyhurst')
             # This is what is slowing everything down.
             #myPt2 = diffMap.world_to_pixel(skyPt)
-            #pos.append({'pos': [myPt.x.to_value(), myPt.y.to_value()]})
+            #pos.append({'pos': [myPt2.x.to_value(), myPt2.y.to_value()]})
             
             r = np.sqrt(pt[0]**2 + pt[1]**2 + pt[2]**2)
             lat = np.arcsin(pt[2]/r) * 180/np.pi
@@ -715,6 +757,7 @@ class mywindow(QtWidgets.QMainWindow):
             myPt = pts2proj(pt, obs, obsScl, center=cent, occultR=2.5*7e8)
             if len(myPt) > 0:          
                 pos.append({'pos': [myPt[0][0], myPt[0][1]]})
+                #print (myPt, myPt2)
         scatter.setData(pos)
         
             
@@ -757,17 +800,17 @@ class mywindow(QtWidgets.QMainWindow):
         
     # Wireframe values    
     def slLon(self, value):
-        global CMElon
+        global CMElon, isStony
         if isStony:
             CMElon = value
-            self.ui.leLon.setText(str(CMElon))
+            self.ui.leLon.setText(str(int(CMElon)))
         else:
             CMElon = value - Elon
             if CMElon > 180:
                 CMElon -= 360
             elif CMElon < -180:
                 CMElon += 360
-            self.ui.leLon.setText(str(value))
+            self.ui.leLon.setText('{:.2f}'.format(value))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
         for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])      
     def slLat(self, value):
@@ -843,8 +886,8 @@ class mywindow(QtWidgets.QMainWindow):
         self.ui.sliderAW.setValue(int(ang))
         self.ui.sliderK.setValue(int(k*100))
         # Make new wirerframes and plot
-        data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])
+        #data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
+        #for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])
 
                         
 # Simple code to set up and run the GUI -------------------------------------------------|        
