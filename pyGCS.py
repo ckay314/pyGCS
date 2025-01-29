@@ -131,9 +131,24 @@ def getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=5, ncirc=20, ncross=30)
     cloud = cmecloud(ang*dtor, height, nleg, ncirc, k, ncross) 
     # in order (of parens) rotx to tilt, roty by -lat, rotz by lon
     #cloud = np.transpose(rotz(roty(rotx(np.transpose(cloud), CMEtilt),-CMElat),CMElon))
-    
     cXYZ = np.transpose(cloud) 
     cXYZ = rotz(roty(rotx(cXYZ, CMEtilt), -CMElat), CMElon)       
     # all the projection stuff is gone, return in Stony Cartesian
         
     return np.transpose(cXYZ)    
+    
+def getShell(CMElon, CMElat, CMEtilt, height, k, ang, n1=30, n2=15):
+    # Define  in model coords
+    phis   = np.linspace(0, 2*np.pi, n1)
+    thetas = np.linspace(-np.pi/2 , np.pi/2, n2)
+    wid1   = height * np.tan(ang*dtor) / (1 + np.tan(ang*dtor))
+    wid2   = k * wid1
+    xyz    = [] 
+    for i in phis:
+        for j in thetas:
+            xyz.append(np.array([height-wid1+wid1*np.cos(j), wid1*np.sin(j)*np.sin(i), wid2*np.sin(j)*np.cos(i)]))
+    # Rotate into stonyhurst heliographic
+    stonyXYZ = rotz(roty(rotx(np.transpose(xyz), CMEtilt), -CMElat), CMElon) 
+    return np.transpose(stonyXYZ)
+    
+    

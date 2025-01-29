@@ -24,6 +24,8 @@ global CMElat, CMElon, CMEtilt, height, k, ang, satpos
 # Make image scl mode for each panel so can use diff ones at same time?
 # Take cloud pt projection out of loop since can do arrays in new version (tho already pretty fast)
 
+occultDict = {'STEREO_SECCHI_COR2':2.5, 'STEREO_SECCHI_COR1':1.1, 'SOHO_LASCO_C1':1.1, 'SOHO_LASCO_C2':2, 'SOHO_LASCO_C3':3.7 } # all in Rsun
+
 
 def pts2proj(pts_in, obs, scale, center=[0,0], occultR=None):
         # Take in a list of points and an observer location and project into pixel coordinates
@@ -343,6 +345,7 @@ class mywindow(QtWidgets.QMainWindow):
         # Give nice titles (sat+instr) to each plot -------------------------------------|
         for i in range(nSats):
             myhdr = diffMaps[i].meta
+            
             myScope = myhdr['telescop']
             if myScope == 'STEREO':
                 mySat = myhdr['obsrvtry'] + ' ' + myhdr['instrume'] + ' ' + myhdr['detector']
@@ -367,14 +370,57 @@ class mywindow(QtWidgets.QMainWindow):
         # Make a mask for the occulter and outside circular FOV -------------------------|
         # Again being lazy and making the same Sun centered approx
         # !!!!! Probly want to add this back in, here or elsewhere
-        '''global masks, innerR
+        global masks, innerR, scaleNshift
         # Occulter distance for each satellite
-        instrDict = {'COR1':1.3, 'COR2': 2, 'C2':1.5, 'C3': 3.7}
+        #instrDict = {'COR1':1.3, 'COR2': 2, 'C2':1.5, 'C3': 3.7}
         masks = []
         innerR = []
         cents = []
+        scaleNshifts = []
         for idx in range(nSats):  
-            myInst = sats[idx][1] 
+            diffMap = diffMaps[idx]
+            myhdr   = diffMap.meta
+            myTag   = myhdr['telescop'] + '_' + myhdr['instrume'] + '_' + myhdr['detector']
+            print (myTag)
+            obsR    = diffMap.observer_coordinate.radius.m / 7e8 # in Rs
+            # Going to assume xy scales are equal for now
+            obsScl  = diffMap.scale[0].to_value() # arcsec / pix
+            
+            mySnS = np.zeros([2,2])
+            # Sun center? Online docs insist is occulter center for cor2 but doesnt seem so
+            cx,cy = int(myhdr['crpix1']), int(myhdr['crpix2'])
+            mySnS[0,0], mySnS[0,1] = cx, cy
+            # 1 Rs in pix
+            if 'rsun' in diffMap.meta:
+                myRs = diffMap.meta['rsun'] # in arcsec
+            else:
+                myDist = diffMap.observer_coordinate.radius.m / 7e8
+                myRs   = np.arctan2(1, myDist) * 206265
+            mySnS[1,0] = myRs/diffMap.scale[0].to_value()
+            mySnS[1,1] = myRs/diffMap.scale[1].to_value()
+
+            mask = np.zeros(diffMap.data.shape)
+            myOccR  = occultDict[myTag] # radius of the occulter in Rs
+            occRpix = int(myOccR * mySnS[1,0])
+
+            # Think this is the occulter center but not sure why dead space in cor image doesn't entirely match
+            crv1, crv2 = myhdr['crval1']/diffMap.scale[0].to_value(), myhdr['crval2']/diffMap.scale[1].to_value()
+            crota = 0
+            if 'crota' in myhdr.keys():
+                crota = myhdr['crota']
+            print (crv1, crv2)
+            cx2 = cx#int(cx - (crv1 * np.cos(-crota) - crv2 * np.sin(-crota)))
+            cy2 = cy#int(cy - (crv1 * np.sin(-crota) + crv2 * np.cos(-crota)))
+            # NEED TO FILL A CIRCLE
+            # Not entirely sure why B appears to have a larger occulter here..
+            #mask[cx2-occRpix:cx2+occRpix+1, cy2-2:cy2+3] = 1
+            #mask[cx2-2:cx2+3, cy2-occRpix:cy2+occRpix+1] = 1
+            
+            
+            masks.append(mask)
+            scaleNshifts.append(mySnS)
+            
+            '''myInst = sats[idx][1] 
             mask = np.zeros(imsIn[idx].shape)
             cent = int(imsIn[idx].shape[0]/2)
             line = np.linspace(0,imsIn[idx].shape[1]-1,imsIn[idx].shape[1])
@@ -514,7 +560,7 @@ class mywindow(QtWidgets.QMainWindow):
         # widgets (with appropriate levels)
         for i in range(nSats):   
             # !!!! add back in mask             
-            '''imgOut[i][np.where(masks[i] == 1)] = np.min(imgOut[i])'''
+            imgOut[i][np.where(masks[i] == 1)] = np.min(imgOut[i])
             images[i].setImage(imgOut[i], levels=minmaxes[i])
 
         # -------------------------------------------------------------------------------|            
@@ -535,17 +581,20 @@ class mywindow(QtWidgets.QMainWindow):
             
         # -------------------------------------------------------------------------------|            
         # Draw a white circle showing the outline of the Sun ----------------------------|
-        # !!!!! Probably want to add back in
-        '''thetas = np.linspace(0, 2*3.14159)
-        self.ui.graphWidget1.plot(scaleNshift[0][0]*np.cos(thetas)+scaleNshift[0][1], scaleNshift[0][0]*np.sin(thetas)+scaleNshift[0][1])
+        thetas = np.linspace(0, 2*3.14159)
+        mySnS = scaleNshifts[0]
+        self.ui.graphWidget1.plot(mySnS[1,0]*np.cos(thetas)+mySnS[0,0], mySnS[1,1]*np.sin(thetas)+mySnS[0,1])
         if nSats > 1:
-            self.ui.graphWidget2.plot(scaleNshift[1][0]*np.cos(thetas)+scaleNshift[1][1], scaleNshift[1][0]*np.sin(thetas)+scaleNshift[1][1])
+            mySnS = scaleNshifts[1]            
+            self.ui.graphWidget2.plot(mySnS[1,0]*np.cos(thetas)+mySnS[0,0], mySnS[1,1]*np.sin(thetas)+mySnS[0,1])
         if nSats==3:
-            self.ui.graphWidget3.plot(scaleNshift[2][0]*np.cos(thetas)+scaleNshift[2][1], scaleNshift[2][0]*np.sin(thetas)+scaleNshift[2][1])'''
+            mySnS = scaleNshifts[2]
+            self.ui.graphWidget3.plot(mySnS[1,0]*np.cos(thetas)+mySnS[0,0], mySnS[1,1]*np.sin(thetas)+mySnS[0,1])
         
         # -------------------------------------------------------------------------------|
         # Calculate the GCS shell using pyGCS and add to the figures --------------------|
-        data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])         
+        data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])       
+        #data = getShell(40, 10, 0, 10, 0.8, 60)  
         for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])
     
     
@@ -748,6 +797,7 @@ class mywindow(QtWidgets.QMainWindow):
             #skyPt = SkyCoord(x=pt[0], y=pt[1], z=pt[2], unit='R_sun', representation_type='cartesian', frame='heliographic_stonyhurst')
             # This is what is slowing everything down.
             #myPt2 = diffMap.world_to_pixel(skyPt)
+            #print ('a', myPt2.x.to_value(), myPt2.y.to_value())
             #pos.append({'pos': [myPt2.x.to_value(), myPt2.y.to_value()]})
             
             r = np.sqrt(pt[0]**2 + pt[1]**2 + pt[2]**2)
@@ -757,7 +807,7 @@ class mywindow(QtWidgets.QMainWindow):
             myPt = pts2proj(pt, obs, obsScl, center=cent, occultR=2.5*7e8)
             if len(myPt) > 0:          
                 pos.append({'pos': [myPt[0][0], myPt[0][1]]})
-                #print (myPt, myPt2)
+                #print ('b',myPt, myPt2)
         scatter.setData(pos)
         
             

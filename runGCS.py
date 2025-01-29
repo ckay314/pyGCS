@@ -13,18 +13,14 @@ import sys
 
 
 fnameA1 = 'fits/20120712_162400_d4c2A.fts'
-fnameA2 = 'fits/20120712_185400_d4c2A.fts' 
+fnameA2 = 'fits/20120712_172400_d4c2A.fts' 
 
 fnameB1 = 'fits/20120712_162400_d4c2B.fts'
-fnameB2 = 'fits/20120712_185400_d4c2B.fts' 
+fnameB2 = 'fits/20120712_172400_d4c2B.fts' 
 
+fnameC1 = 'fits/L20120712_162400.fts'
+fnameC2 = 'fits/L20120712_171200.fts'
 
-#fnameB1 = None
-#fnameB2 = None
-
-
-fnameC1 = 'fits/C3_20120712_163005.fts'
-fnameC2 = 'fits/C3_20120712_171805.fts'
 
 allFiles = []
 if (fnameA1 != None) & (fnameA2 != None):
@@ -48,6 +44,8 @@ def reclip(aMap, OGdim):
     reclipData = myData[iy1:iy2, ix1:ix2]
     aMap.meta['crpix1'] = aMap.meta['crpix1'] - ix1
     aMap.meta['crpix2'] = aMap.meta['crpix2'] - iy1
+    #aMap.meta['crval1'] = aMap.meta['crval1'] - ix1 * aMap.scale[0].to_value()
+    #aMap.meta['crval2'] = aMap.meta['crval2'] - iy1 * aMap.scale[1].to_value()
     reclipMap = sunpy.map.Map(reclipData, aMap.meta)
     return reclipMap
     
@@ -67,10 +65,13 @@ for aPair in allFiles:
     else:
         crota = 0
     if np.abs(crota) > 0.001: 
+        print (my_map1F.meta['crpix1'], my_map1F.meta['crval1'])
         my_map1FR = my_map1F.rotate(missing=0, clip=True)
         # Check the dimensions bc apparently clip does nothing
         if (my_map1.dimensions[0] != my_map1FR.dimensions[0]) or (my_map1.dimensions[1] != my_map1FR.dimensions[1]):
+            print (my_map1FR.meta['crpix1'], my_map1FR.meta['crval1'])
             my_map1FR = reclip(my_map1FR, my_map1.dimensions)
+            print (my_map1FR.meta['crpix1'], my_map1FR.meta['crval1'])
     else:
         my_map1FR = my_map1F
 
