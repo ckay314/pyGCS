@@ -16,15 +16,15 @@ global nSats
 global CMElat, CMElon, CMEtilt, height, k, ang, satpos
 
 
-# |------ Things to potentially improve ------|
-# Need to test with LASCO (and COR1?)
-# Check CROTA always zero for the fits? Rotate if not
-# Currently hardcoded for occulter of 2.5 Rs (can set in occultR = in call to pts2proj)
-# Add white circle for edge of Sun
-# Make image scl mode for each panel so can use diff ones at same time?
-# Take cloud pt projection out of loop since can do arrays in new version (tho already pretty fast)
 
-occultDict = {'STEREO_SECCHI_COR2':2.5, 'STEREO_SECCHI_COR1':1.1, 'SOHO_LASCO_C1':1.1, 'SOHO_LASCO_C2':2, 'SOHO_LASCO_C3':3.7 } # all in Rsun
+# |------ Things to potentially improve ------|
+# Need to test with COR1/ C1
+# Need to adapt to HI
+# Make image scl mode for each panel so can use diff ones at same time?
+# Add toggle to do height on each panel -> velo measurements
+
+
+occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.1,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32] } # all in Rsun
 
 
 def pts2proj(pts_in, obs, scale, center=[0,0], occultR=None):
@@ -370,9 +370,8 @@ class mywindow(QtWidgets.QMainWindow):
         # Make a mask for the occulter and outside circular FOV -------------------------|
         # Again being lazy and making the same Sun centered approx
         # !!!!! Probly want to add this back in, here or elsewhere
-        global masks, innerR, scaleNshift
+        global masks, innerR, scaleNshifts
         # Occulter distance for each satellite
-        #instrDict = {'COR1':1.3, 'COR2': 2, 'C2':1.5, 'C3': 3.7}
         masks = []
         innerR = []
         cents = []
@@ -386,10 +385,12 @@ class mywindow(QtWidgets.QMainWindow):
             # Going to assume xy scales are equal for now
             obsScl  = diffMap.scale[0].to_value() # arcsec / pix
             
-            mySnS = np.zeros([2,2])
-            # Sun center? Online docs insist is occulter center for cor2 but doesnt seem so
+            mySnS = np.zeros([3,2])
+            # Reference pixel, which should be img center now
             cx,cy = int(myhdr['crpix1']), int(myhdr['crpix2'])
+            sx, sy = myhdr['crpix1'] - myhdr['crval1']/myhdr['cdelt1'], myhdr['crpix2'] - myhdr['crval2']/myhdr['cdelt2']
             mySnS[0,0], mySnS[0,1] = cx, cy
+            mySnS[2,0], mySnS[2,1] = sx, sy
             # 1 Rs in pix
             if 'rsun' in diffMap.meta:
                 myRs = diffMap.meta['rsun'] # in arcsec
@@ -400,37 +401,30 @@ class mywindow(QtWidgets.QMainWindow):
             mySnS[1,1] = myRs/diffMap.scale[1].to_value()
 
             mask = np.zeros(diffMap.data.shape)
-            myOccR  = occultDict[myTag] # radius of the occulter in Rs
+            myOccR  = occultDict[myTag][0] # radius of the occulter in Rs
             occRpix = int(myOccR * mySnS[1,0])
-
-            # Think this is the occulter center but not sure why dead space in cor image doesn't entirely match
-            crv1, crv2 = myhdr['crval1']/diffMap.scale[0].to_value(), myhdr['crval2']/diffMap.scale[1].to_value()
-            crota = 0
-            if 'crota' in myhdr.keys():
-                crota = myhdr['crota']
-            print (crv1, crv2)
-            cx2 = cx#int(cx - (crv1 * np.cos(-crota) - crv2 * np.sin(-crota)))
-            cy2 = cy#int(cy - (crv1 * np.sin(-crota) + crv2 * np.cos(-crota)))
-            # NEED TO FILL A CIRCLE
-            # Not entirely sure why B appears to have a larger occulter here..
-            #mask[cx2-occRpix:cx2+occRpix+1, cy2-2:cy2+3] = 1
-            #mask[cx2-2:cx2+3, cy2-occRpix:cy2+occRpix+1] = 1
             
+            # Fill in a circle around the occulter center
+            for i in range(occRpix):
+                j = int(np.sqrt(occRpix**2 - i**2))
+                mask[cx+i, cy-j:cy+j+1] = 1
+                mask[cx-i, cy-j:cy+j+1] = 1    
+            
+            # Fill in outside FoV
+            outRpix = int(occultDict[myTag][1] * mySnS[1,0]) 
+            for i in range(diffMap.meta['naxis1']):
+                myHdist = np.abs(cx-i)
+                if myHdist >= outRpix:
+                    mask[i,:] = 1
+                else:
+                    possY = int(np.sqrt(outRpix**2 - myHdist**2))
+                    lowY = np.max([0,cy - possY])
+                    hiY  = np.min([diffMap.meta['naxis1']-1,cy + possY])
+                    mask[i,:lowY+1] = 1
+                    mask[i,hiY:] = 1
             
             masks.append(mask)
             scaleNshifts.append(mySnS)
-            
-            '''myInst = sats[idx][1] 
-            mask = np.zeros(imsIn[idx].shape)
-            cent = int(imsIn[idx].shape[0]/2)
-            line = np.linspace(0,imsIn[idx].shape[1]-1,imsIn[idx].shape[1])
-            for i in range(imsIn[idx].shape[0]):
-                    mask[i,:] = np.sqrt((i-cent)**2 + (line-cent)**2)
-            mask = mask / scaleNshift[idx][0]
-            mask[np.where(mask >plotrangesIn[idx][1])] = 1.
-            mask[np.where(mask<instrDict[myInst])] = 1.
-            innerR.append(instrDict[myInst])
-            masks.append(mask)'''
             
         # -------------------------------------------------------------------------------|            
         # Set up the image spots in the GUI and make an array ---------------------------|
@@ -583,19 +577,19 @@ class mywindow(QtWidgets.QMainWindow):
         # Draw a white circle showing the outline of the Sun ----------------------------|
         thetas = np.linspace(0, 2*3.14159)
         mySnS = scaleNshifts[0]
-        self.ui.graphWidget1.plot(mySnS[1,0]*np.cos(thetas)+mySnS[0,0], mySnS[1,1]*np.sin(thetas)+mySnS[0,1])
+        self.ui.graphWidget1.plot(mySnS[1,0]*np.cos(thetas)+mySnS[2,0], mySnS[1,1]*np.sin(thetas)+mySnS[2,1])
         if nSats > 1:
             mySnS = scaleNshifts[1]            
-            self.ui.graphWidget2.plot(mySnS[1,0]*np.cos(thetas)+mySnS[0,0], mySnS[1,1]*np.sin(thetas)+mySnS[0,1])
+            self.ui.graphWidget2.plot(mySnS[1,0]*np.cos(thetas)+mySnS[2,0], mySnS[1,1]*np.sin(thetas)+mySnS[2,1])
         if nSats==3:
             mySnS = scaleNshifts[2]
-            self.ui.graphWidget3.plot(mySnS[1,0]*np.cos(thetas)+mySnS[0,0], mySnS[1,1]*np.sin(thetas)+mySnS[0,1])
+            self.ui.graphWidget3.plot(mySnS[1,0]*np.cos(thetas)+mySnS[2,0], mySnS[1,1]*np.sin(thetas)+mySnS[2,1])
         
         # -------------------------------------------------------------------------------|
         # Calculate the GCS shell using pyGCS and add to the figures --------------------|
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])       
-        #data = getShell(40, 10, 0, 10, 0.8, 60)  
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])
+        #data = getGCS(40, 10, 0, 10, 0.8, 60)  
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])
     
     
     
@@ -627,7 +621,7 @@ class mywindow(QtWidgets.QMainWindow):
         else:
             CMElon = val 
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])
           
 
     # -----------------------------------------------------------------------------------|            
@@ -719,7 +713,7 @@ class mywindow(QtWidgets.QMainWindow):
             wireShow = False
         else:
             data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])                
-            for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])
+            for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])
             wireShow = True 
 
     # -----------------------------------------------------------------------------------|            
@@ -774,7 +768,7 @@ class mywindow(QtWidgets.QMainWindow):
             print ('Saving panel 3 as GCSframe3.png')
                 
     # -----------------------------------------------------------------------------------|            
-    def plotGCSscatter(self, scatter, data, diffMap): #----------------------------------|
+    def plotGCSscatter(self, scatter, data, diffMap, mySnS): #----------------------------------|
         # Take the data from pyGCS, shift and scale to match coronagraph
         # range and put it in a happy pyqt format.  If statement will hide
         # any values behind the Sun to try and help projection confusion
@@ -794,7 +788,7 @@ class mywindow(QtWidgets.QMainWindow):
         for pt in data:
             # Old version, new fast matches within ~ 1 pix
             # Keepin in here to validate against as needed
-            #skyPt = SkyCoord(x=pt[0], y=pt[1], z=pt[2], unit='R_sun', representation_type='cartesian', frame='heliographic_stonyhurst')
+            skyPt = SkyCoord(x=pt[0], y=pt[1], z=pt[2], unit='R_sun', representation_type='cartesian', frame='heliographic_stonyhurst')
             # This is what is slowing everything down.
             #myPt2 = diffMap.world_to_pixel(skyPt)
             #print ('a', myPt2.x.to_value(), myPt2.y.to_value())
@@ -804,7 +798,7 @@ class mywindow(QtWidgets.QMainWindow):
             lat = np.arcsin(pt[2]/r) * 180/np.pi
             lon = np.arctan2(pt[1],pt[0]) * 180 / np.pi
             pt = [lat, lon, r*7e8] 
-            myPt = pts2proj(pt, obs, obsScl, center=cent, occultR=2.5*7e8)
+            myPt = pts2proj(pt, obs, obsScl, center=cent, occultR=mySnS[1,0]*7e8)
             if len(myPt) > 0:          
                 pos.append({'pos': [myPt[0][0], myPt[0][1]]})
                 #print ('b',myPt, myPt2)
@@ -862,19 +856,19 @@ class mywindow(QtWidgets.QMainWindow):
                 CMElon += 360
             self.ui.leLon.setText('{:.2f}'.format(value))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])      
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])      
     def slLat(self, value):
         global CMElat
         CMElat = value
         self.ui.leLat.setText(str(CMElat))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])          
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])          
     def slTilt(self, value):
         global CMEtilt
         CMEtilt = value
         self.ui.leTilt.setText(str(CMEtilt))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])         
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])         
     def slHeight(self, value):
         global height
         # scale the height to a larger range to make the slider
@@ -882,13 +876,13 @@ class mywindow(QtWidgets.QMainWindow):
         height = 0.1*value
         self.ui.leHeight.setText('{:6.2f}'.format(height))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])           
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])           
     def slAW(self, value):
         global ang
         ang = value
         self.ui.leAW.setText(str(ang))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])  
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])  
     def slK(self, value):
         global k
         # scale the ratio to a larger range to make the slider
@@ -896,7 +890,7 @@ class mywindow(QtWidgets.QMainWindow):
         k = 0.01*value
         self.ui.leK.setText('{:3.2f}'.format(k))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i])          
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])          
         
     # All the text things ---------------------------------------------------------------|
     def allImText(self):

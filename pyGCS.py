@@ -93,9 +93,6 @@ def shellSkeleton(alpha, h, nleg, ncirc, k):
     
     X0 = (rho+b*k**2*np.sin(beta))/(1-k**2)
     rc = np.sqrt((b**2*k**2-rho**2)/(1-k**2)+X0**2)
-    #for i in range(len(X0)):
-    #    print (beta[i]*180/3.14, (X0[i]+rc[i])*np.cos(beta[i]), b+(X0[i]+rc[i])*np.sin(beta[i]), np.arctan((X0[i]+rc[i])*np.cos(beta[i])/(b+(X0[i]+rc[i])*np.sin(beta[i])))*180/3.14)
-    #print (np.arctan((np.sin(alpha)+k*np.sqrt(1-k**2+np.sin(alpha)**2))/(1-k**2))*180/3.14)
         
     rightCirc[:,1] = X0*np.cos(beta) 
     rightCirc[:,0] = b+X0*np.sin(beta)
@@ -137,10 +134,10 @@ def getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=5, ncirc=20, ncross=30)
         
     return np.transpose(cXYZ)    
     
-def getShell(CMElon, CMElat, CMEtilt, height, k, ang, n1=30, n2=15):
+def getShell(CMElon, CMElat, CMEtilt, height, k, ang, nleg=0, ncross=30, ncirc=15):
     # Define  in model coords
-    phis   = np.linspace(0, 2*np.pi, n1)
-    thetas = np.linspace(-np.pi/2 , np.pi/2, n2)
+    phis   = np.linspace(0, 2*np.pi, ncross)
+    thetas = np.linspace(-np.pi/2 , np.pi/2, ncirc)
     wid1   = height * np.tan(ang*dtor) / (1 + np.tan(ang*dtor))
     wid2   = k * wid1
     xyz    = [] 
