@@ -7,6 +7,8 @@ from scipy import ndimage
 #import sunpy
 import sunpy.map
 import sys
+from skimage import exposure
+
 
 # Make sunpy/astropy shut up about info/warning for missing metadata
 import logging
@@ -24,8 +26,8 @@ fnameA2 = 'fits/20120712_172400_d4c2A.fts'
 fnameB1 = 'fits/20120712_162400_d4c2B.fts'
 fnameB2 = 'fits/20120712_172400_d4c2B.fts' 
 
-fnameC1 = 'fits/L20120712_162400.fts'
-fnameC2 = 'fits/L20120712_171200.fts'
+fnameC1 = 'fits/20120713_004901_s4h1A.fts'
+fnameC2 = 'fits/20120713_072901_s4h1A.fts'
 
 
 #fnameB1 = None
@@ -75,6 +77,7 @@ for aPair in allFiles:
         sys.exit('Dimension mismatch between image and base for '+ aPair[0] + ' and ' + aPair[1])
     
     flData = my_map1.data.astype(np.float32)
+        
     my_map1F = sunpy.map.Map(flData, my_map1.meta)
     if 'crota' in my_map1.meta:
         crota = my_map1.meta['crota']
@@ -88,18 +91,19 @@ for aPair in allFiles:
         # After rot sun is centered at crpix-crval/cdelt in fits units (index from 1)
         # and exact match to various sunpy methods of obtaining (accounting for index from 0)
         # If recenter then crpix is in image center (w/indexing diff)
-        # Clip defaults to true but also seems to do nothing so not explicitly including
         my_map1FR = my_map1F.rotate(angle=crota*u.deg, missing=0, recenter=True) 
         
         # Not passing an angle to rotate is equiv to rot by angle =crota*u.deg
 
-        # Check the dimensions bc apparently clip does nothing
+        # Check the dimensions bc rotation changes it
         if (my_map1.dimensions[0] != my_map1FR.dimensions[0]) or (my_map1.dimensions[1] != my_map1FR.dimensions[1]):
             my_map1FR = reclip(my_map1FR, my_map1)
     else:
         my_map1FR = my_map1F
+    
 
     flData2 = my_map2.data.astype(np.float32)
+
     if 'crota' in my_map2.meta:
         crota2 = my_map2.meta['crota']
     elif 'crota1' in my_map2.meta:
@@ -108,13 +112,25 @@ for aPair in allFiles:
         crota2 = 0
     my_map2F = sunpy.map.Map(flData2, my_map2.meta)
     if np.abs(crota2) > 0.001: 
-        my_map2FR = my_map2F.rotate(missing=0, clip=True)
+        my_map2FR = my_map2F.rotate(angle=crota*u.deg, missing=0, clip=True)
         if (my_map2.dimensions[0] != my_map2FR.dimensions[0]) or (my_map2.dimensions[1] != my_map2FR.dimensions[1]):
            my_map2FR = reclip(my_map2FR, my_map2)
     else:
         my_map2FR = my_map2F
     
-    rd = sunpy.map.Map(my_map2FR - my_map1FR.quantity)
+    # check if HI and histogram equalize if so
+    if 'HI' in my_map2.meta['detector']:
+        
+        temp = exposure.equalize_hist(my_map2FR.data - my_map1FR.data)
+        rd = sunpy.map.Map(temp, my_map2FR.meta)
+       
+       
+        #fig = plt.figure
+        #plt.imshow(temp)
+        #plt.show()
+        
+    else:
+        rd = sunpy.map.Map(my_map2FR - my_map1FR.quantity)
     diffMaps.append(rd)
 
 # Number of points in the wireframe

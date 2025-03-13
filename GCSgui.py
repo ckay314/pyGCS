@@ -20,11 +20,12 @@ global CMElat, CMElon, CMEtilt, height, k, ang, satpos
 # |------ Things to potentially improve ------|
 # Need to test with COR1/ C1
 # Need to adapt to HI
+# Unpack loop calling pts2proj
 # Make image scl mode for each panel so can use diff ones at same time?
 # Add toggle to do height on each panel -> velo measurements
 
 
-occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.1,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32] } # all in Rsun
+occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.1,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215]} # all in Rsun
 
 
 def pts2proj(pts_in, obs, scale, center=[0,0], occultR=None):
@@ -33,6 +34,7 @@ def pts2proj(pts_in, obs, scale, center=[0,0], occultR=None):
         # In theory can be in any 3D sphere system as long as consistent across all pts (inc obs) 
         # Scale should either be a single value or [scalex, scaley] !!! yes this is oppo of lat/lon input 
         #   order but this is how CK's brain works
+        # occultR is an angle, either arcsec/deg to match scale
     
         # Useful constants 
         rad2arcsec = 206265
@@ -53,8 +55,7 @@ def pts2proj(pts_in, obs, scale, center=[0,0], occultR=None):
         else:
             sclx = scale[0]
             scly = scale[1]
-            
-
+        
         # convert all the pts to radians
         pts_lats = pts_in[:,0]*dtor 
         pts_lons = pts_in[:,1]*dtor 
@@ -74,18 +75,20 @@ def pts2proj(pts_in, obs, scale, center=[0,0], occultR=None):
         y = pts_rs * (np.sin(pts_lats) * np.cos(obs_lat) - np.cos(pts_lats)*np.cos(dLon)*np.sin(obs_lat))
         z = pts_rs * (np.sin(pts_lats) * np.sin(obs_lat) + np.cos(pts_lats)*np.cos(dLon)*np.cos(obs_lat))
         
-        
         # Convert to projected vals
         d = np.sqrt(x**2 +  y**2 + (obs_r-z)**2)
-        thetax = np.arctan2(x, obs_r - z) * rad2arcsec / sclx + center[0]
-        thetay = np.arcsin(y/d)* rad2arcsec / scly + center[1]
+        dthetax = np.arctan2(x, obs_r - z) * rad2arcsec / sclx 
+        thetax  = dthetax + center[0]
+        dthetay = np.arcsin(y/d)* rad2arcsec / scly 
+        thetay  = dthetay + center[1]
         
         # Check if we want to throw out the points that would be behind the occulter
+        
         if occultR: 
-            dProj = np.sqrt(x**2 +  y**2)
+            dProj = np.sqrt(dthetax**2 +  dthetay**2)
             outs = []
             for i in range(len(d)):
-                if (dProj[i] > occultR) or (z[i] > 0):
+                if (dProj[i] > occultR/sclx) or (z[i] > 0):
                     outs.append([thetax[i], thetay[i]])
             outs = np.array(outs)
         else:
@@ -323,12 +326,14 @@ class mywindow(QtWidgets.QMainWindow):
         imgOrig = []
         imgOut  = []
         for i in range(nSats):
-            scl2ints = 100/np.median(np.abs(diffMaps[i].data))
-            thisIm = diffMaps[i].data * scl2ints
+            if 'HI' in diffMaps[i].meta['detector']:
+                thisIm = 1000*(diffMaps[i].data -0.5)
+            else:
+                scl2ints = 100/np.median(np.abs(diffMaps[i].data))
+                thisIm = diffMaps[i].data * scl2ints
             imgOrig.append(np.transpose(thisIm))
             imgOut.append(np.transpose(thisIm))
         
-                
         # -------------------------------------------------------------------------------|            
         # ESSENTIAL GUI SETUP THAT I TOTALLY UNDERSTAND! --------------------------------|           
         super(mywindow, self).__init__()
@@ -345,9 +350,13 @@ class mywindow(QtWidgets.QMainWindow):
         # Give nice titles (sat+instr) to each plot -------------------------------------|
         for i in range(nSats):
             myhdr = diffMaps[i].meta
-            
-            myScope = myhdr['telescop']
-            if myScope == 'STEREO':
+            if 'telescop' in myhdr.keys():
+                myScope = myhdr['telescop']
+            else:
+                myScope = myhdr['obsrvtry']
+            if myScope in ['STEREO', 'STEREO_A', 'STEREO_B']:
+                if '_' in myScope:
+                    diffMaps[i].meta['telescop'] = 'STEREO'
                 mySat = myhdr['obsrvtry'] + ' ' + myhdr['instrume'] + ' ' + myhdr['detector']
                 myDate = myhdr['date-avg']
             if myScope == 'SOHO':
@@ -385,10 +394,10 @@ class mywindow(QtWidgets.QMainWindow):
             # Going to assume xy scales are equal for now
             obsScl  = diffMap.scale[0].to_value() # arcsec / pix
             
-            mySnS = np.zeros([3,2])
+            mySnS = np.zeros([4,2])
             # Reference pixel, which should be img center now
-            cx,cy = int(myhdr['crpix1']), int(myhdr['crpix2'])
-            sx, sy = myhdr['crpix1'] - myhdr['crval1']/myhdr['cdelt1'], myhdr['crpix2'] - myhdr['crval2']/myhdr['cdelt2']
+            cx,cy = int(myhdr['crpix1'])-1, int(myhdr['crpix2'])-1
+            sx, sy = myhdr['crpix1'] - 1 - myhdr['crval1']/myhdr['cdelt1'], myhdr['crpix2'] - 1 - myhdr['crval2']/myhdr['cdelt2']
             mySnS[0,0], mySnS[0,1] = cx, cy
             mySnS[2,0], mySnS[2,1] = sx, sy
             # 1 Rs in pix
@@ -401,27 +410,36 @@ class mywindow(QtWidgets.QMainWindow):
             mySnS[1,1] = myRs/diffMap.scale[1].to_value()
 
             mask = np.zeros(diffMap.data.shape)
-            myOccR  = occultDict[myTag][0] # radius of the occulter in Rs
-            occRpix = int(myOccR * mySnS[1,0])
             
-            # Fill in a circle around the occulter center
-            for i in range(occRpix):
-                j = int(np.sqrt(occRpix**2 - i**2))
-                mask[cx+i, cy-j:cy+j+1] = 1
-                mask[cx-i, cy-j:cy+j+1] = 1    
+            if 'HI' not in diffMaps[idx].meta['detector']:   
+                myOccR  = occultDict[myTag][0] # radius of the occulter in Rs
+                occRpix = int(myOccR * mySnS[1,0])
+                mySnS[3,0] = mySnS[1,0] * occultDict[myTag][0]
+                mySnS[3,1] = mySnS[1,1] * occultDict[myTag][0]
+                
+                # Fill in a circle around the occulter center
+                for i in range(occRpix):
+                    j = int(np.sqrt(occRpix**2 - i**2))
+                    lowY = np.max([0,cy-j])
+                    hiY  = np.min([diffMap.meta['naxis2']-2, cy+j])
+                    #print (cx+i, lowY,hiY+1)
+                    if cx+i <= diffMap.meta['naxis2']-1:
+                        mask[cx+i, lowY:hiY+1] = 1
+                    if cx-i >=0:
+                        mask[cx-i, lowY:hiY+1] = 1    
             
-            # Fill in outside FoV
-            outRpix = int(occultDict[myTag][1] * mySnS[1,0]) 
-            for i in range(diffMap.meta['naxis1']):
-                myHdist = np.abs(cx-i)
-                if myHdist >= outRpix:
-                    mask[i,:] = 1
-                else:
-                    possY = int(np.sqrt(outRpix**2 - myHdist**2))
-                    lowY = np.max([0,cy - possY])
-                    hiY  = np.min([diffMap.meta['naxis1']-1,cy + possY])
-                    mask[i,:lowY+1] = 1
-                    mask[i,hiY:] = 1
+                # Fill in outside FoV
+                outRpix = int(occultDict[myTag][1] * mySnS[1,0]) 
+                for i in range(diffMap.meta['naxis1']):
+                    myHdist = np.abs(cx-i)
+                    if myHdist >= outRpix:
+                        mask[i,:] = 1
+                    else:
+                        possY = int(np.sqrt(outRpix**2 - myHdist**2))
+                        lowY = np.max([0,cy - possY])
+                        hiY  = np.min([diffMap.meta['naxis2'],cy + possY])
+                        mask[i,:lowY+1] = 1
+                        mask[i,hiY:] = 1
             
             masks.append(mask)
             scaleNshifts.append(mySnS)
@@ -465,8 +483,7 @@ class mywindow(QtWidgets.QMainWindow):
         if Elon < -180:
             Elon += 360.
         Elon = float('{:.2f}'.format(Elon))
-        
-        
+                
         # -------------------------------------------------------------------------------|            
         # Check if there is an file with previous values to load ------------------------|
         minmaxesIn = [[-9999, -9999],[-9999, -9999], [-9999, -9999]]
@@ -545,6 +562,8 @@ class mywindow(QtWidgets.QMainWindow):
         if minmaxesIn[0][0] == -9999:
             for i in range(nSats):
                 minmaxes[i] = self.initBrange(imgOut[i],i)
+            if 'HI' in diffMaps[i].meta['detector']:   
+                minmaxes[i] = [-500,500]                
         else:
             minmaxes = minmaxesIn        
         self.resetBrights(minmaxes)
@@ -553,10 +572,11 @@ class mywindow(QtWidgets.QMainWindow):
         # Add the mask to the images, then the images to the ----------------------------|
         # widgets (with appropriate levels)
         for i in range(nSats):   
-            # !!!! add back in mask             
-            imgOut[i][np.where(masks[i] == 1)] = np.min(imgOut[i])
+            # !!!! add back in mask  
+            if 'HI' not in diffMaps[i].meta['detector']:            
+                imgOut[i][np.where(masks[i] == 1)] = np.min(imgOut[i])
             images[i].setImage(imgOut[i], levels=minmaxes[i])
-
+ 
         # -------------------------------------------------------------------------------|            
         # Set up the scatter items that will hold the GCS shells ------------------------|        
         global scatters
@@ -653,6 +673,9 @@ class mywindow(QtWidgets.QMainWindow):
         if self.ui.menuScale.currentText() in ['Sqrt', 'Log']:
             Bmin, Bmax = int(absMed), int(1.25*absMed)
             slLow, slHigh = 0, 3*absMed
+        if 'HI' in diffMaps[idx].meta['detector']:
+            Bmin, Bmax = -250, 250
+            slLow, slHigh = -500,500
         # Figure out which slider and box        
         if idx==0:
             sls = [self.ui.slSat1low, self.ui.slSat1hi]    
@@ -777,13 +800,11 @@ class mywindow(QtWidgets.QMainWindow):
         
         pixCloud = []
         obs = [diffMap.observer_coordinate.lat.deg, diffMap.observer_coordinate.lon.deg, diffMap.observer_coordinate.radius.m]
-        obsScl = [diffMap.scale[0].to_value(), diffMap.scale[1].to_value()]  # arcsec/pix
-        skyPt = SkyCoord(diffMap.observer_coordinate.lon, 0*u.deg, 0*u.solRad,frame="heliographic_stonyhurst", obstime=diffMap.date) 
-        cent = diffMap.wcs.world_to_pixel(skyPt)
-        #print (cent)
-        #refP = diffMap.reference_pixel
-        #print (refP.x.to_value()-diffMap.reference_coordinate.Tx.to_value()/obsScl[0], refP.y.to_value()-diffMap.reference_coordinate.Ty.to_value()/obsScl[1])
-
+        obsScl = [diffMap.scale[0].to_value(), diffMap.scale[1].to_value()]  # arcsec/pix for COR
+        if 'HI' in diffMap.meta['detector']: # then assuming deg/pix, true for STEREO
+            obsScl = [diffMap.scale[0].to_value()*3600, diffMap.scale[1].to_value()*3600]
+        cent   = mySnS[2,:]
+        occultR = mySnS[3,0] * diffMap.scale[0].to_value()
         # Can probably unpack this, built pts2proj for arrays
         for pt in data:
             # Old version, new fast matches within ~ 1 pix
@@ -793,12 +814,12 @@ class mywindow(QtWidgets.QMainWindow):
             #myPt2 = diffMap.world_to_pixel(skyPt)
             #print ('a', myPt2.x.to_value(), myPt2.y.to_value())
             #pos.append({'pos': [myPt2.x.to_value(), myPt2.y.to_value()]})
-            
+           
             r = np.sqrt(pt[0]**2 + pt[1]**2 + pt[2]**2)
             lat = np.arcsin(pt[2]/r) * 180/np.pi
             lon = np.arctan2(pt[1],pt[0]) * 180 / np.pi
             pt = [lat, lon, r*7e8] 
-            myPt = pts2proj(pt, obs, obsScl, center=cent, occultR=mySnS[1,0]*7e8)
+            myPt = pts2proj(pt, obs, obsScl, center=cent, occultR=occultR)
             if len(myPt) > 0:          
                 pos.append({'pos': [myPt[0][0], myPt[0][1]]})
                 #print ('b',myPt, myPt2)
