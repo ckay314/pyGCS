@@ -112,7 +112,7 @@ for aPair in allFiles:
         crota2 = 0
     my_map2F = sunpy.map.Map(flData2, my_map2.meta)
     if np.abs(crota2) > 0.001: 
-        my_map2FR = my_map2F.rotate(angle=crota*u.deg, missing=0, clip=True)
+        my_map2FR = my_map2F.rotate(angle=crota2*u.deg, missing=0, recenter=True)
         if (my_map2.dimensions[0] != my_map2FR.dimensions[0]) or (my_map2.dimensions[1] != my_map2FR.dimensions[1]):
            my_map2FR = reclip(my_map2FR, my_map2)
     else:

@@ -416,7 +416,6 @@ class mywindow(QtWidgets.QMainWindow):
                 occRpix = int(myOccR * mySnS[1,0])
                 mySnS[3,0] = mySnS[1,0] * occultDict[myTag][0]
                 mySnS[3,1] = mySnS[1,1] * occultDict[myTag][0]
-                
                 # Fill in a circle around the occulter center
                 for i in range(occRpix):
                     j = int(np.sqrt(occRpix**2 - i**2))
