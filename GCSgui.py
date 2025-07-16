@@ -12,6 +12,10 @@ from pyGCS import *
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 
+sys.path.append('/Users/kaycd1/STEREO_Mass/IDLport') 
+from wcs_funs import fitshead2wcs, wcs_get_pixel
+
+
 global nSats
 global CMElat, CMElon, CMEtilt, height, k, ang, satpos
 
@@ -28,7 +32,7 @@ global CMElat, CMElon, CMEtilt, height, k, ang, satpos
 occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.1,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215]} # all in Rsun
 
 
-def pts2proj(pts_in, obs, scale, center=[0,0], occultR=None):
+def pts2projOLD(pts_in, obs, scale, center=[0,0], occultR=None):
         # Take in a list of points and an observer location and project into pixel coordinates
         # Expect pts as [lat, lon, r] in [deg, deg, x] where x doesn't matter as long as consistent
         # In theory can be in any 3D sphere system as long as consistent across all pts (inc obs) 
@@ -89,6 +93,80 @@ def pts2proj(pts_in, obs, scale, center=[0,0], occultR=None):
             outs = []
             for i in range(len(d)):
                 if (dProj[i] > occultR/sclx) or (z[i] > 0):
+                    outs.append([thetax[i], thetay[i]])
+            outs = np.array(outs)
+        else:
+            # repackage as array of [ [pixX1, pixY1], [pixX2, pixY2], ...]
+            outs = np.array([thetax, thetay]).transpose()
+        return outs
+
+def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None):
+        # Take in a list of points and an observer location and project into pixel coordinates
+        # Expect pts as [lat, lon, r] in [deg, deg, x] where x doesn't matter as long as consistent
+        # In theory can be in any 3D sphere system as long as consistent across all pts (inc obs) 
+        # Scale should either be a single value or [scalex, scaley] !!! yes this is oppo of lat/lon input 
+        #   order but this is how CK's brain works
+        # occultR is an angle, either arcsec/deg to match scale
+    
+        # Useful constants 
+        rad2arcsec = 206265
+        dtor = np.pi / 180.
+    
+        # check inputs and reformat as 2D array (even if single pt)
+        if isinstance(pts_in, list):
+            pts_in = np.array(pts_in)
+        
+        if len(pts_in.shape) == 1:
+            pts_in = np.array([pts_in])
+        
+        # check if scale is single value or array of two
+        if isinstance(scale, float) or isinstance(scale, int):
+            # single value, set both to it
+            sclx = scale
+            scly = scale
+        else:
+            sclx = scale[0]
+            scly = scale[1]
+        
+        # convert all the pts to radians
+        pts_lats = pts_in[:,0]*dtor 
+        pts_lons = pts_in[:,1]*dtor 
+        pts_rs   = pts_in[:,2]
+
+        # convert obs location
+        obs_lat = obs[0]*dtor
+        obs_lon = obs[1]*dtor
+        obs_r   = obs[2]
+    
+        # define dLon var as short hand
+        dLon = pts_lons - obs_lon
+    
+        # Convert from Stony heliographic (or something similar) to heliocentric cartesian
+        # this is with x to right, y up, z toward obs
+        x = pts_rs  * np.cos(pts_lats) * np.sin(dLon)
+        y = pts_rs * (np.sin(pts_lats) * np.cos(obs_lat) - np.cos(pts_lats)*np.cos(dLon)*np.sin(obs_lat))
+        z = pts_rs * (np.sin(pts_lats) * np.sin(obs_lat) + np.cos(pts_lats)*np.cos(dLon)*np.cos(obs_lat))
+        
+        # Convert to projected vals
+        d = np.sqrt(x**2 +  y**2 + (obs_r-z)**2)
+        if mywcs['cunit'][0] == 'arcsec':
+            rad2unit = rad2arcsec
+        elif mywcs['cunit'][0] == 'deg':
+            rad2unit = 180. / np.pi
+        dthetax = np.arctan2(x, obs_r - z) * rad2unit 
+        dthetay = np.arcsin(y/d)* rad2unit 
+        
+        coord = wcs_get_pixel(mywcs, [dthetax, dthetay], doQuick=False)
+        
+        # Check if we want to throw out the points that would be behind the occulter
+        outs = np.array([coord[0,:], coord[1,:]]).transpose()
+        thetax, thetay = coord[0,:], coord[1,:]
+        
+        if occultR: 
+            dProj = np.sqrt(dthetax**2 +  dthetay**2)
+            outs = []
+            for i in range(len(d)):
+                if (dProj[i] > occultR) or (z[i] > 0):
                     outs.append([thetax[i], thetay[i]])
             outs = np.array(outs)
         else:
@@ -379,12 +457,13 @@ class mywindow(QtWidgets.QMainWindow):
         # Make a mask for the occulter and outside circular FOV -------------------------|
         # Again being lazy and making the same Sun centered approx
         # !!!!! Probly want to add this back in, here or elsewhere
-        global masks, innerR, scaleNshifts
+        global masks, innerR, scaleNshifts, wcss
         # Occulter distance for each satellite
         masks = []
         innerR = []
         cents = []
         scaleNshifts = []
+        wcss = []
         for idx in range(nSats):  
             diffMap = diffMaps[idx]
             myhdr   = diffMap.meta
@@ -397,7 +476,20 @@ class mywindow(QtWidgets.QMainWindow):
             mySnS = np.zeros([4,2])
             # Reference pixel, which should be img center now
             cx,cy = int(myhdr['crpix1'])-1, int(myhdr['crpix2'])-1
-            sx, sy = myhdr['crpix1'] - 1 - myhdr['crval1']/myhdr['cdelt1'], myhdr['crpix2'] - 1 - myhdr['crval2']/myhdr['cdelt2']
+            obsLon = diffMap.observer_coordinate.lon.degree
+            obsLat = diffMap.observer_coordinate.lat.degree
+            obsR = diffMap.observer_coordinate.radius.m
+
+            # Old version with skycoord
+            #skyPt = SkyCoord(obsLon*u.deg, obsLat*u.deg, 1*u.solRad,frame="heliographic_stonyhurst", obstime=diffMap.date)
+            #centS = diffMap.wcs.world_to_pixel(skyPt)
+
+            # This is exact match for COR, HI diffs slightly from map version but match to IDL
+            myWCS = fitshead2wcs(myhdr)
+            wcss.append(myWCS)
+            centS = wcs_get_pixel(myWCS, [0.,0.])
+            sx, sy = centS[0], centS[1]
+                        
             mySnS[0,0], mySnS[0,1] = cx, cy
             mySnS[2,0], mySnS[2,1] = sx, sy
             # 1 Rs in pix
@@ -608,7 +700,7 @@ class mywindow(QtWidgets.QMainWindow):
         # Calculate the GCS shell using pyGCS and add to the figures --------------------|
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])       
         #data = getGCS(40, 10, 0, 10, 0.8, 60)  
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i], wcss[i])
     
     
     
@@ -640,7 +732,7 @@ class mywindow(QtWidgets.QMainWindow):
         else:
             CMElon = val 
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i], wcss[i])
           
 
     # -----------------------------------------------------------------------------------|            
@@ -735,7 +827,7 @@ class mywindow(QtWidgets.QMainWindow):
             wireShow = False
         else:
             data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])                
-            for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])
+            for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i], wcss[i])
             wireShow = True 
 
     # -----------------------------------------------------------------------------------|            
@@ -790,7 +882,7 @@ class mywindow(QtWidgets.QMainWindow):
             print ('Saving panel 3 as GCSframe3.png')
                 
     # -----------------------------------------------------------------------------------|            
-    def plotGCSscatter(self, scatter, data, diffMap, mySnS): #----------------------------------|
+    def plotGCSscatter(self, scatter, data, diffMap, mySnS, mywcs): #----------------------------------|
         # Take the data from pyGCS, shift and scale to match coronagraph
         # range and put it in a happy pyqt format.  If statement will hide
         # any values behind the Sun to try and help projection confusion
@@ -805,23 +897,37 @@ class mywindow(QtWidgets.QMainWindow):
         cent   = mySnS[2,:]
         occultR = mySnS[3,0] * diffMap.scale[0].to_value()
         # Can probably unpack this, built pts2proj for arrays
+        counter = 0
         for pt in data:
+            counter += 1
             # Old version, new fast matches within ~ 1 pix
             # Keepin in here to validate against as needed
-            skyPt = SkyCoord(x=pt[0], y=pt[1], z=pt[2], unit='R_sun', representation_type='cartesian', frame='heliographic_stonyhurst')
+            #skyPt = SkyCoord(x=pt[0], y=pt[1], z=pt[2], unit='R_sun', representation_type='cartesian', frame='heliographic_stonyhurst')
             # This is what is slowing everything down.
             #myPt2 = diffMap.world_to_pixel(skyPt)
-            #print ('a', myPt2.x.to_value(), myPt2.y.to_value())
+            #if counter < 20:
+            #    print ('a', myPt2.x.to_value(), myPt2.y.to_value())
             #pos.append({'pos': [myPt2.x.to_value(), myPt2.y.to_value()]})
            
             r = np.sqrt(pt[0]**2 + pt[1]**2 + pt[2]**2)
             lat = np.arcsin(pt[2]/r) * 180/np.pi
             lon = np.arctan2(pt[1],pt[0]) * 180 / np.pi
             pt = [lat, lon, r*7e8] 
-            myPt = pts2proj(pt, obs, obsScl, center=cent, occultR=occultR)
+
+            # Old approx version, new is more accurate
+            '''myPt = pts2projOLD(pt, obs, obsScl, center=cent, occultR=occultR)
             if len(myPt) > 0:          
                 pos.append({'pos': [myPt[0][0], myPt[0][1]]})
-                #print ('b',myPt, myPt2)
+                if counter < 20:
+                    print ('b',myPt, myPt2)'''
+
+
+            myPt = pts2proj(pt, obs, obsScl, mywcs, center=cent, occultR=occultR)
+            if len(myPt) > 0:          
+                pos.append({'pos': [myPt[0][0], myPt[0][1]]})
+                #if counter < 20:
+                #    print ('c',myPt, myPt2)
+
         scatter.setData(pos)
         
             
@@ -876,19 +982,19 @@ class mywindow(QtWidgets.QMainWindow):
                 CMElon += 360
             self.ui.leLon.setText('{:.2f}'.format(value))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])      
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i], wcss[i])      
     def slLat(self, value):
         global CMElat
         CMElat = value
         self.ui.leLat.setText(str(CMElat))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])          
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i], wcss[i])          
     def slTilt(self, value):
         global CMEtilt
         CMEtilt = value
         self.ui.leTilt.setText(str(CMEtilt))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])         
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i], wcss[i])         
     def slHeight(self, value):
         global height
         # scale the height to a larger range to make the slider
@@ -896,13 +1002,13 @@ class mywindow(QtWidgets.QMainWindow):
         height = 0.1*value
         self.ui.leHeight.setText('{:6.2f}'.format(height))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])           
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i], wcss[i])           
     def slAW(self, value):
         global ang
         ang = value
         self.ui.leAW.setText(str(ang))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])  
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i], wcss[i])  
     def slK(self, value):
         global k
         # scale the ratio to a larger range to make the slider
@@ -910,7 +1016,7 @@ class mywindow(QtWidgets.QMainWindow):
         k = 0.01*value
         self.ui.leK.setText('{:3.2f}'.format(k))
         data = getGCS(CMElon, CMElat, CMEtilt, height, k, ang, nleg=ns[0], ncirc=ns[1], ncross=ns[2])
-        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i])          
+        for i in range(nSats):  self.plotGCSscatter(scatters[i], data, diffMaps[i], scaleNshifts[i], wcss[i])          
         
     # All the text things ---------------------------------------------------------------|
     def allImText(self):

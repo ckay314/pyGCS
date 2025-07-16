@@ -9,6 +9,11 @@ import sunpy.map
 import sys
 from skimage import exposure
 
+sys.path.append('/Users/kaycd1/STEREO_Mass/IDLport') 
+from secchi_prep import secchi_prep
+
+
+import matplotlib.image as mpimg
 
 # Make sunpy/astropy shut up about info/warning for missing metadata
 import logging
@@ -48,95 +53,45 @@ if (fnameC1 != None) & (fnameC2 != None):
 
 diffMaps =  []  
 
-def reclip(aMap, OGmap):
-    myCent = [aMap.reference_pixel.x.to_value(), aMap.reference_pixel.y.to_value()]
-    OGdim = OGmap.dimensions
-    OGx = OGdim.x.to_value()
-    OGy = OGdim.y.to_value()
-    hwx = OGx / 2 
-    hwy = OGy / 2
-    myData = aMap.data
-    ix1, ix2 = int(myCent[0] - hwx), int(myCent[0] + hwx)
-    iy1, iy2 = int(myCent[1] - hwy), int(myCent[1] + hwy)
-    reclipData = myData[iy1:iy2, ix1:ix2]
-    # Sunpy submap routine only changes crpix/naxis so following that
-    aMap.meta['crpix1'] = (aMap.meta['crpix1'] - ix1) 
-    aMap.meta['crpix2'] = (aMap.meta['crpix2'] - iy1) 
-    aMap.meta['naxis1']  = OGmap.meta['naxis1']
-    aMap.meta['naxis2']  = OGmap.meta['naxis2']
-    # IF have issues try updating map (bottom_left_coord, dimensions, reference_pixel, top_right_coord)
-    # or meta (crval, crota/pc_matrix, crvalA, crpixA, xcen, ycen, pcA )
-    reclipMap = sunpy.map.Map(reclipData, aMap.meta)
-    return reclipMap
-    
-    
 for aPair in allFiles:
-    my_map1 = sunpy.map.Map(aPair[0])
-    my_map2 = sunpy.map.Map(aPair[1])
-    if my_map1.dimensions != my_map2.dimensions:
-        sys.exit('Dimension mismatch between image and base for '+ aPair[0] + ' and ' + aPair[1])
-    
-    flData = my_map1.data.astype(np.float32)
+   
+    ims, hdrs = secchi_prep([aPair[0], aPair[1]])
+    if hdrs[1]['DETECTOR'] not in ['HI1', 'HI2']:
+        diff = ims[1] - ims[0]
+    else:
+        # gets unhappy if give it HI in brightness units instead of counts
+        # gotta take out the extreme values so full data doesn't get dumped in
+        # tiny part of color scale
+        diff = ims[1] - ims[0]
+        diff = diff / np.median(np.abs(diff))
+        dperc = 10
+        diff[np.where(diff < np.percentile(diff,dperc))] = np.percentile(diff,dperc)
+        diff[np.where(diff > np.percentile(diff,100-dperc))] = np.percentile(diff,100-dperc)
+        diff = exposure.equalize_hist(diff)
         
-    my_map1F = sunpy.map.Map(flData, my_map1.meta)
-    if 'crota' in my_map1.meta:
-        crota = my_map1.meta['crota']
-    elif 'crota1' in my_map1.meta:
-        crota = my_map1.meta['crota1']
-    else:
-        crota = 0
-     
-    if np.abs(crota) > 0.001: 
-        # Rotation occurs about crpix (ref pix) which is neither the Sun nor image center
-        # After rot sun is centered at crpix-crval/cdelt in fits units (index from 1)
-        # and exact match to various sunpy methods of obtaining (accounting for index from 0)
-        # If recenter then crpix is in image center (w/indexing diff)
-        my_map1FR = my_map1F.rotate(angle=crota*u.deg, missing=0, recenter=True) 
-        
-        # Not passing an angle to rotate is equiv to rot by angle =crota*u.deg
-
-        # Check the dimensions bc rotation changes it
-        if (my_map1.dimensions[0] != my_map1FR.dimensions[0]) or (my_map1.dimensions[1] != my_map1FR.dimensions[1]):
-            my_map1FR = reclip(my_map1FR, my_map1)
-    else:
-        my_map1FR = my_map1F
-    
-
-    flData2 = my_map2.data.astype(np.float32)
-
-    if 'crota' in my_map2.meta:
-        crota2 = my_map2.meta['crota']
-    elif 'crota1' in my_map2.meta:
-        crota2 = my_map2.meta['crota1']
-    else:
-        crota2 = 0
-    my_map2F = sunpy.map.Map(flData2, my_map2.meta)
-    if np.abs(crota2) > 0.001: 
-        my_map2FR = my_map2F.rotate(angle=crota2*u.deg, missing=0, recenter=True)
-        if (my_map2.dimensions[0] != my_map2FR.dimensions[0]) or (my_map2.dimensions[1] != my_map2FR.dimensions[1]):
-           my_map2FR = reclip(my_map2FR, my_map2)
-    else:
-        my_map2FR = my_map2F
-    
-    # check if HI and histogram equalize if so
-    if 'HI' in my_map2.meta['detector']:
-        
-        temp = exposure.equalize_hist(my_map2FR.data - my_map1FR.data)
-        rd = sunpy.map.Map(temp, my_map2FR.meta)
-       
-       
-        #fig = plt.figure
-        #plt.imshow(temp)
-        #plt.show()
-        
-    else:
-        rd = sunpy.map.Map(my_map2FR - my_map1FR.quantity)
+    rd = sunpy.map.Map(diff, hdrs[1])
     diffMaps.append(rd)
+
+
+# Completely necessary things
+'''print (diffMaps[0].data.shape)
+img = mpimg.imread('/Users/kaycd1/Downloads/BC1.png')
+r, g, b = img[:,:,0], img[:,:,1], img[:,:,2]
+gray = 0.2989 * r + 0.5870 * g + 0.1140 * b
+hdr = diffMaps[0].meta
+diffMaps[0] = sunpy.map.Map(gray[:,:], hdr)
+
+img = mpimg.imread('/Users/kaycd1/Downloads/BC2.png')
+r, g, b = img[:,:,0], img[:,:,1], img[:,:,2]
+gray = 0.2989 * r + 0.5870 * g + 0.1140 * b
+hdr = diffMaps[0].meta
+diffMaps[1] = sunpy.map.Map(gray[:,:], hdr)'''
 
 # Number of points in the wireframe
 # [nleg, ncircle, naxis]
 #ns =[3,10,31]      
 ns =[5,20,50]      
+#ns =[3,6,21]      
 
 
 # Pass everything to the GUI -------------------------------------------|
