@@ -11,6 +11,7 @@ from skimage import exposure
 
 sys.path.append('/Users/kaycd1/STEREO_Mass/IDLport') 
 from secchi_prep import secchi_prep
+from wispr_prep import wispr_prep
 
 
 import matplotlib.image as mpimg
@@ -28,13 +29,19 @@ alogger.setLevel(logging.ERROR)
 fnameA1 = 'fits/20120712_162400_d4c2A.fts'
 fnameA2 = 'fits/20120712_172400_d4c2A.fts' 
 
-fnameB1 = 'fits/20120712_162400_d4c2B.fts'
-fnameB2 = 'fits/20120712_172400_d4c2B.fts' 
+
+#fnameA1 = 'fits/C3_20120712_171805.fts'
+#fnameA2 = 'fits/C3_20120712_224722.fts' 
+
+#fnameB1 = 'fits/20120712_162400_d4c2B.fts'
+#fnameB2 = 'fits/20120712_172400_d4c2B.fts' 
 
 fnameC1 = 'fits/20120713_004901_s4h1A.fts'
 fnameC2 = 'fits/20120713_072901_s4h1A.fts'
 
-
+fnameB1 = 'fits/psp_L2_wispr_20210121T055621_V1_1211.fits'
+fnameB2 = 'fits/psp_L2_wispr_20210121T062821_V1_1211.fits'
+    
 #fnameB1 = None
 #fnameB2 = None
 
@@ -54,21 +61,26 @@ if (fnameC1 != None) & (fnameC2 != None):
 diffMaps =  []  
 
 for aPair in allFiles:
-   
-    ims, hdrs = secchi_prep([aPair[0], aPair[1]])
-    if hdrs[1]['DETECTOR'] not in ['HI1', 'HI2']:
-        diff = ims[1] - ims[0]
+    if 'wispr' not in aPair[0]:
+        ims, hdrs = secchi_prep([aPair[0], aPair[1]])
+        if hdrs[1]['DETECTOR'] not in ['HI1', 'HI2']:
+            diff = ims[1] - ims[0]
+        else:
+            # gets unhappy if give it HI in brightness units instead of counts
+            # gotta take out the extreme values so full data doesn't get dumped in
+            # tiny part of color scale
+            diff = ims[1] - ims[0]
+            diff = diff / np.median(np.abs(diff))
+            dperc = 10
+            diff[np.where(diff < np.percentile(diff,dperc))] = np.percentile(diff,dperc)
+            diff[np.where(diff > np.percentile(diff,100-dperc))] = np.percentile(diff,100-dperc)
+            diff = exposure.equalize_hist(diff)
     else:
-        # gets unhappy if give it HI in brightness units instead of counts
-        # gotta take out the extreme values so full data doesn't get dumped in
-        # tiny part of color scale
+        ims, hdrs = wispr_prep([aPair[0], aPair[1]], straylightOff=True)
         diff = ims[1] - ims[0]
-        diff = diff / np.median(np.abs(diff))
-        dperc = 10
-        diff[np.where(diff < np.percentile(diff,dperc))] = np.percentile(diff,dperc)
-        diff[np.where(diff > np.percentile(diff,100-dperc))] = np.percentile(diff,100-dperc)
-        diff = exposure.equalize_hist(diff)
-        
+        # treat detector as int not string so fix that
+        for hdr in hdrs:
+            hdr['detector'] = str(hdr['detector'])
     rd = sunpy.map.Map(diff, hdrs[1])
     diffMaps.append(rd)
 

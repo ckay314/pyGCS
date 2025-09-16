@@ -404,7 +404,12 @@ class mywindow(QtWidgets.QMainWindow):
         imgOrig = []
         imgOut  = []
         for i in range(nSats):
-            if 'HI' in diffMaps[i].meta['detector']:
+            if diffMaps[i].meta['obsrvtry'] == 'Parker Solar Probe':
+                # Not sure about these values, just copied as place holder
+                scl2ints = 100/np.median(np.abs(diffMaps[i].data[~np.isnan(diffMaps[i].data)]))
+                thisIm = diffMaps[i].data * scl2ints
+                thisIm[np.where(thisIm == np.nan)] = 0
+            elif 'HI' in diffMaps[i].meta['detector']:
                 thisIm = 1000*(diffMaps[i].data -0.5)
             else:
                 scl2ints = 100/np.median(np.abs(diffMaps[i].data))
@@ -432,6 +437,7 @@ class mywindow(QtWidgets.QMainWindow):
                 myScope = myhdr['telescop']
             else:
                 myScope = myhdr['obsrvtry']
+            print (myScope)
             if myScope in ['STEREO', 'STEREO_A', 'STEREO_B']:
                 if '_' in myScope:
                     diffMaps[i].meta['telescop'] = 'STEREO'
@@ -440,6 +446,10 @@ class mywindow(QtWidgets.QMainWindow):
             if myScope == 'SOHO':
                 mySat = myhdr['telescop']  + ' '+ myhdr['instrume'] + ' ' + myhdr['detector']
                 myDate = myhdr['date-obs'].replace('/','-')+'T'+myhdr['time-obs']
+            if myScope == 'Parker Solar Probe':
+                mySat   = myhdr['obsrvtry'] + '_' + myhdr['instrume'] + '_HI' + myhdr['detector']
+                myDate = myhdr['date-avg']
+                
             
             #myDate = myhdr['date']
             # take off decimal secs
@@ -467,7 +477,10 @@ class mywindow(QtWidgets.QMainWindow):
         for idx in range(nSats):  
             diffMap = diffMaps[idx]
             myhdr   = diffMap.meta
-            myTag   = myhdr['telescop'] + '_' + myhdr['instrume'] + '_' + myhdr['detector']
+            if myhdr['obsrvtry'] != 'Parker Solar Probe':
+                myTag   = myhdr['telescop'] + '_' + myhdr['instrume'] + '_' + myhdr['detector']
+            else:
+                myTag   = myhdr['obsrvtry'] + '_' + myhdr['instrume'] + '_HI' + myhdr['detector']
             print (myTag)
             obsR    = diffMap.observer_coordinate.radius.m / 7e8 # in Rs
             # Going to assume xy scales are equal for now
@@ -503,7 +516,7 @@ class mywindow(QtWidgets.QMainWindow):
 
             mask = np.zeros(diffMap.data.shape)
             
-            if 'HI' not in diffMaps[idx].meta['detector']:   
+            if ('HI' not in diffMaps[idx].meta['detector']) & (diffMaps[idx].meta['obsrvtry'] != 'Parker Solar Probe'):   
                 myOccR  = occultDict[myTag][0] # radius of the occulter in Rs
                 occRpix = int(myOccR * mySnS[1,0])
                 mySnS[3,0] = mySnS[1,0] * occultDict[myTag][0]
@@ -757,7 +770,8 @@ class mywindow(QtWidgets.QMainWindow):
     def initBrange(self, imIn, idx): # --------------------------------------------------|
         # Make a guess at a good range for each plot based on
         # the current scaling method and rescale to that value
-        absMed = (np.median(np.abs(imIn)))
+        goodIm = imIn[np.isfinite(imIn)]
+        absMed = (np.median(np.abs(goodIm[goodIm != 0])))
         if self.ui.menuScale.currentText() == 'Linear':
             Bmin, Bmax = -10*absMed, 10*absMed
             slLow, slHigh = -30*absMed, 30*absMed
