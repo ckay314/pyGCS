@@ -120,13 +120,13 @@ def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None):
             pts_in = np.array([pts_in])
         
         # check if scale is single value or array of two
-        if isinstance(scale, float) or isinstance(scale, int):
+        '''if isinstance(scale, float) or isinstance(scale, int):
             # single value, set both to it
             sclx = scale
             scly = scale
         else:
             sclx = scale[0]
-            scly = scale[1]
+            scly = scale[1]'''
         
         # convert all the pts to radians
         pts_lats = pts_in[:,0]*dtor 
@@ -149,9 +149,9 @@ def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None):
         
         # Convert to projected vals
         d = np.sqrt(x**2 +  y**2 + (obs_r-z)**2)
-        if mywcs['cunit'][0] == 'arcsec':
+        if mywcs['cunit'][0].lower() == 'arcsec':
             rad2unit = rad2arcsec
-        elif mywcs['cunit'][0] == 'deg':
+        elif mywcs['cunit'][0].lower() == 'deg':
             rad2unit = 180. / np.pi
         dthetax = np.arctan2(x, obs_r - z) * rad2unit 
         dthetay = np.arcsin(y/d)* rad2unit 
@@ -404,7 +404,7 @@ class mywindow(QtWidgets.QMainWindow):
         imgOrig = []
         imgOut  = []
         for i in range(nSats):
-            if diffMaps[i].meta['obsrvtry'] == 'Parker Solar Probe':
+            if diffMaps[i].meta['obsrvtry'] in ['Parker Solar Probe', 'Solar Orbiter']:
                 # Not sure about these values, just copied as place holder
                 scl2ints = 100/np.median(np.abs(diffMaps[i].data[~np.isnan(diffMaps[i].data)]))
                 thisIm = diffMaps[i].data * scl2ints
@@ -449,6 +449,9 @@ class mywindow(QtWidgets.QMainWindow):
             if myScope == 'Parker Solar Probe':
                 mySat   = myhdr['obsrvtry'] + '_' + myhdr['instrume'] + '_HI' + myhdr['detector']
                 myDate = myhdr['date-avg']
+            if 'SoloHI' in myScope:
+                mySat   = myhdr['obsrvtry'] + '_' + myhdr['instrume'] 
+                myDate = myhdr['date-avg']
                 
             
             #myDate = myhdr['date']
@@ -477,11 +480,13 @@ class mywindow(QtWidgets.QMainWindow):
         for idx in range(nSats):  
             diffMap = diffMaps[idx]
             myhdr   = diffMap.meta
-            if myhdr['obsrvtry'] != 'Parker Solar Probe':
-                myTag   = myhdr['telescop'] + '_' + myhdr['instrume'] + '_' + myhdr['detector']
-            else:
+            if myhdr['obsrvtry'] == 'Parker Solar Probe':
                 myTag   = myhdr['obsrvtry'] + '_' + myhdr['instrume'] + '_HI' + myhdr['detector']
-            print (myTag)
+            elif myhdr['obsrvtry'] == 'Solar Orbiter':
+                myTag   = myhdr['obsrvtry'] + '_' + myhdr['instrume']
+            else:
+                myTag   = myhdr['telescop'] + '_' + myhdr['instrume'] + '_' + myhdr['detector']
+               
             obsR    = diffMap.observer_coordinate.radius.m / 7e8 # in Rs
             # Going to assume xy scales are equal for now
             obsScl  = diffMap.scale[0].to_value() # arcsec / pix
@@ -516,7 +521,7 @@ class mywindow(QtWidgets.QMainWindow):
 
             mask = np.zeros(diffMap.data.shape)
             
-            if ('HI' not in diffMaps[idx].meta['detector']) & (diffMaps[idx].meta['obsrvtry'] != 'Parker Solar Probe'):   
+            if ('HI' not in diffMaps[idx].meta['detector']) & (diffMaps[idx].meta['obsrvtry'] not in ['Parker Solar Probe', 'Solar Orbiter']):   
                 myOccR  = occultDict[myTag][0] # radius of the occulter in Rs
                 occRpix = int(myOccR * mySnS[1,0])
                 mySnS[3,0] = mySnS[1,0] * occultDict[myTag][0]
