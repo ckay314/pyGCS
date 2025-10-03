@@ -16,7 +16,7 @@ bonusColors = ['#FF2056', '#9810FA', '#FFD230']
 # Attempting to keep theta to lon angle and phi to lat angle throughout WOMBAT
 # Everything is defined wrt to CK's Theoryland (which is Cartesian with 'nose' along x-axis
 # and largest non-radial width in the z/vertical direction for antisymmetric shapes)
-gridDict = {'GCS':[5,20,50], 'Torus':[15,10], 'Sphere':[50,25], 'Half Sphere':[25,25], 'Ellipsoid':[50,25], 'Half Ellipsoid':[25,25], 'Slab':[20,20,20]}
+gridDict = {'GCS':[5,15,30], 'Torus':[25,15], 'Sphere':[50,25], 'Half Sphere':[25,25], 'Ellipsoid':[50,25], 'Half Ellipsoid':[25,25], 'Slab':[20,20,20]}
 
 
 
@@ -34,7 +34,7 @@ rngDict = {'Height (Rs)':[1,25], 'Lon (deg)':[-180,180], 'Lat (deg)':[-90,90], '
 rngDictHI = {'Height (Rs)':[1,215], 'Lx (Rs)':[0,215], 'Ly (Rs)':[0,215], 'Lz (Rs)':[0,215]}
 
 # The default values for each parameter (again COR appropriate)
-defDict = {'Height (Rs)':10, 'Lon (deg)':0, 'Lat (deg)':0, 'Tilt (deg)':0, 'AW (deg)':30, 'AW_FO (deg)':40, 'AW_EO (deg)':15, 'kappa':0.3, 'deltaAx':1, 'deltaCS':1, 'ecc1':0.8, 'ecc2':0.5, 'Roll (deg)':0, 'Yaw (deg)':0, 'Pitch (deg)':30, 'Lx (Rs)':10, 'Ly (Rs)':4, 'Lz (Rs)':10}
+defDict = {'Height (Rs)':10, 'Lon (deg)':0, 'Lat (deg)':0, 'Tilt (deg)':0, 'AW (deg)':30, 'AW_FO (deg)':40, 'AW_EO (deg)':15, 'kappa':0.3, 'deltaAx':1, 'deltaCS':1, 'ecc1':0.8, 'ecc2':0.5, 'Roll (deg)':0, 'Yaw (deg)':0, 'Pitch (deg)':0, 'Lx (Rs)':10, 'Ly (Rs)':4, 'Lz (Rs)':10}
 
 # The HI values
 defDictHI = {'Height (Rs)':50, 'Lx (Rs)':50, 'Ly (Rs)':10, 'Lz (Rs)':50}
@@ -110,26 +110,28 @@ def SPH2CART(sph_in):
 class wireframe():
     "Container to hold all the parameters and the points for a wireframe object"
     def __init__(self, WFtype):
-        if WFtype not in npDict:
-            sys.exit('Unrecognized wireframe type. Exiting now... bye')
         self.WFtype   = WFtype
-        self.nParams  = npDict[WFtype]
-        self.WFcolor  = colorDict[WFtype]
-        self.labels   = np.empty(self.nParams)
-        self.ranges   = np.array([np.empty(2) for i in range(self.nParams)])
-        self.params   = np.empty(self.nParams)
-        self.gPoints  = None # set up the number of points in the grid
-        self.points   = None # the WF grid points in theoryland coords
+        if type(WFtype) != type(None):
+            if WFtype not in npDict:
+                sys.exit('Unrecognized wireframe type. Exiting now... bye')
+            self.nParams  = npDict[WFtype]
+            self.WFcolor  = colorDict[WFtype]
+            self.labels   = np.empty(self.nParams)
+            self.ranges   = np.array([np.empty(2) for i in range(self.nParams)])
+            self.params   = np.empty(self.nParams)
+            self.gPoints  = None # set up the number of points in the grid
+            self.points   = None # the WF grid points in theoryland coords
         
-        # Set up labels
-        self.setLabels()
-        # Set up default ranges/parameters/grid points 
-        self.setDefs()
-        # Set up the number of grid points based on WF type
-        self.gPoints = gridDict[WFtype]
+        if WFtype != None:
+            # Set up labels
+            self.setLabels()
+            # Set up default ranges/parameters/grid points 
+            self.setDefs()
+            # Set up the number of grid points based on WF type
+            self.gPoints = gridDict[WFtype]
         
-        # Calc points - get the WF structure in theoryland
-        self.getPoints()
+            # Calc points - get the WF structure in theoryland
+            self.getPoints()
         
     # |-----------------------------------------------------------------|
     # |--- Set up the text that will go above the sliders/text boxes ---|
@@ -385,7 +387,13 @@ class wireframe():
             xs.append(np.array([[xrs]*ny]).reshape(-1))
             ys.append(np.array([[[yrs[i]]*nx for i in range(ny)]]).reshape(-1))
             
+            xs = np.array(xs).reshape(-1)
+            ys = np.array(ys).reshape(-1)
+            zs = np.array(zs).reshape(-1)
+            
+            
             xyz = np.array([xs, ys, zs])
+            
             # Rot by roll about x
             xyz = rotx(xyz,roll)
             # Rot by yaw about z
@@ -395,6 +403,7 @@ class wireframe():
             
             # add in the distance
             xyz[0] += h
+            xyz = np.array(xyz)
             
             # Move in lat/lon
             self.points = np.transpose(rotz(roty(xyz, -lat), lon))  
