@@ -7,18 +7,27 @@ from matplotlib.figure import Figure
 import wombatWF as wf
 import pyqtgraph as pg
 
+from wcs_funs import fitshead2wcs, wcs_get_pixel
+
+
 import logging
 logging.basicConfig(level='INFO')
 slogger = logging.getLogger('QGridLayout')
 slogger.setLevel(logging.ERROR)
 
 # Maintain a limited number of global variables to make passing things easier
+# (had to move into releaseTheWombats after function-ifying)
 # main window = the parameter window
 # pws = array of plot windows
 # wfs = array of wireframes in theoryland coords
 # bmodes = array of integer background scaling modes, defaults to linear = 0
-global mainwindow, pws, nwinds, wfs, nwfs, bmodes
+#global mainwindow, pws, nSats, wfs, nwfs, bmodes
 
+
+global occultDict
+# Nominal radii (in Rs) for the occulters for each instrument. Pulled from google so 
+# generally correct (hopefully) but not the most precise
+occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.1,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215]} 
 
 class ParamWindow(QMainWindow):
     def __init__(self, nTabs):
@@ -33,7 +42,7 @@ class ParamWindow(QMainWindow):
         # Create a QTabWidget
         self.tab_widget = QTabWidget()
         self.setCentralWidget(self.tab_widget)
-
+        
         # Create individual tabs (pages)
         self.tabs =[]
         
@@ -287,6 +296,7 @@ class ParamWindow(QMainWindow):
         
     def cb_index_changed(self, a='None',idx=-10):
         self.WFtypes[idx] = a
+
         # Check if making a new wf
         if type(wfs[idx].WFtype) == type(None):
             myType = self.WFnum2type[a]
@@ -330,11 +340,13 @@ class ParamWindow(QMainWindow):
             # Give the structure the new wf
             wfs[idx] = newWF
             
-        for ipw in range(nwinds):
-            pws[ipw].plotWFs()
+        for aPW in pws:
+            aPW.plotBackground()
+            aPW.plotWFs()
             
     def back_changed(self,text):
-        print (text)
+        for aPW in pws:
+             aPW.cbox.setCurrentIndex(text)         
             
     def EBclicked(self):
         sys.exit()
@@ -366,65 +378,95 @@ class ParamWindow(QMainWindow):
                 flagIt = True
         if not flagIt:
             aWF.getPoints()
-            for ipw in range(nwinds):
+            for ipw in range(nSats):
                 pws[ipw].plotWFs()
     
         
 class FigWindow(QWidget):
-    def __init__(self, satName, myNum=0):
+    def __init__(self, satName, myObs, myScls, satStuff, myNum=0):
         super().__init__()
-        self.setWindowTitle(satName)
+        # Obs are [[ims], [hdrs]] as passed to the GUI (prob MSB)
+        # Scls are [[lin, log, sqrt]] on -100,100 range
+        
         self.setGeometry(550*(myNum+1), 350, 350, 450)
-        self.satName = satName
+        
+        self.satStuff = satStuff
+        self.satName = satStuff[0]['OBS'] +' '+ satStuff[0]['INST']
+        self.setWindowTitle(self.satName)
+        
+        self.OGims = myObs[0]
+        self.hdrs = myObs[1]
+        self.myScls2 = myScls
+        self.tidx = 0
+        self.sclidx = 0
 
-        layout =  QGridLayout()
+        layoutP =  QGridLayout()
         
         self.pWindow = pg.PlotWidget()
         self.pWindow.setMinimumSize(400, 400)
-        layout.addWidget(self.pWindow,0,0,11,11,alignment=QtCore.Qt.AlignCenter)
+        layoutP.addWidget(self.pWindow,0,0,11,11,alignment=QtCore.Qt.AlignCenter)
         
-        # attempt to get a nice size window
+        # make an image item
+        self.image = pg.ImageItem()
+        self.pWindow.addItem(self.image)
+        #self.pWindow.setRange(xRange=(0,myObs[0][0].data.shape[0]), yRange=(0,myObs[0][0].data.shape[1]), padding=0)
+        
+        # Hide the axes
         self.pWindow.hideAxis('bottom')
         self.pWindow.hideAxis('left')
-        self.pWindow.setRange(xRange=(-25,25), yRange=(-25,25), padding=0)
+        
+        # Set up scatters for the WF points so can adjust without clearing
+        self.scatters = []
+        for i in range(nwfs):
+            aScat = pg.ScatterPlotItem(pen=pg.mkPen(width=1, color='g'), symbol='o', size=2)
+            self.scatters.append(aScat)
+            self.pWindow.addItem(aScat)
         
         # Background mode drop down box
         label = QLabel('Background Scaling Type')
-        layout.addWidget(label, 12,0,1,5,alignment=QtCore.Qt.AlignCenter)
-        cbox = self.bgComboBox()
-        layout.addWidget(cbox,12,5,1,5,alignment=QtCore.Qt.AlignCenter)
+        layoutP.addWidget(label, 12,0,1,5,alignment=QtCore.Qt.AlignCenter)
+        self.cbox = self.bgComboBox()
+        layoutP.addWidget(self.cbox,12,5,1,5,alignment=QtCore.Qt.AlignCenter)
         
         # Min/max brightness sliders
         minL = QLabel('Min Value:     ')
-        layout.addWidget(minL, 13,0,1,9)
-        slider = QSlider()
-        slider.setOrientation(QtCore.Qt.Horizontal)
-        layout.addWidget(slider, 13,3,1,9)
-        slider.valueChanged.connect(lambda x: self.s2l(x, minL, 'Min Value: '))  
+        layoutP.addWidget(minL, 13,0,1,9)
+        self.MinSlider = QSlider()
+        self.MinSlider.setOrientation(QtCore.Qt.Horizontal)
+        self.MinSlider.setMinimum(-50)
+        self.MinSlider.setMaximum(150)
+        self.MinSlider.setValue(0)
+        layoutP.addWidget(self.MinSlider, 13,3,1,9)
+        self.MinSlider.valueChanged.connect(lambda x: self.s2l(x, minL, 'Min Value: '))  
         
         maxL = QLabel('Max Value:     ')
-        layout.addWidget(maxL, 15,0,1,9)
-        slider = QSlider()
-        slider.setOrientation(QtCore.Qt.Horizontal)
-        layout.addWidget(slider, 15,3,1,9)
-        slider.valueChanged.connect(lambda x: self.s2l(x, maxL, 'Max Value: '))  
+        layoutP.addWidget(maxL, 15,0,1,9)
+        self.MaxSlider = QSlider()
+        self.MaxSlider.setOrientation(QtCore.Qt.Horizontal)
+        self.MaxSlider.setMinimum(-50)
+        self.MaxSlider.setMaximum(150)
+        self.MaxSlider.setValue(100)
+        layoutP.addWidget(self.MaxSlider, 15,3,1,9)
+        self.MaxSlider.valueChanged.connect(lambda x: self.s2l(x, maxL, 'Max Value: '))  
         
         saveBut = QPushButton('Save')
         saveBut.released.connect(self.SBclicked)
-        layout.addWidget(saveBut, 17, 0, 1,3,alignment=QtCore.Qt.AlignCenter)
+        layoutP.addWidget(saveBut, 17, 0, 1,3,alignment=QtCore.Qt.AlignCenter)
 
         massBut = QPushButton('Mass')
         massBut.released.connect(self.MBclicked)
-        layout.addWidget(massBut, 17, 4, 1,3,alignment=QtCore.Qt.AlignCenter)
+        layoutP.addWidget(massBut, 17, 4, 1,3,alignment=QtCore.Qt.AlignCenter)
 
         # Add things at the bottom
         exitBut = QPushButton('Exit')
         exitBut.released.connect(self.EBclicked)
         exitBut.setStyleSheet("background-color: red")
-        layout.addWidget(exitBut, 17, 8, 1,3,alignment=QtCore.Qt.AlignCenter)
+        layoutP.addWidget(exitBut, 17, 8, 1,3,alignment=QtCore.Qt.AlignCenter)
         
-        self.setLayout(layout)
-        #self.plotWFs(wfs)
+        self.setLayout(layoutP)
+        
+        self.plotBackground()
+        
         
     #|------------------------------| 
     #|----------- Layout -----------|
@@ -444,6 +486,7 @@ class FigWindow(QWidget):
     
     def s2l(self, x=None, l=None, pref=None):
         l.setText(pref + str(x))
+        self.plotBackground()
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Q: 
@@ -453,8 +496,10 @@ class FigWindow(QWidget):
     
 
     def back_changed(self,text):
-        print (text)
-        
+        self.sclidx = text     
+        self.plotBackground()
+            
+       
     def EBclicked(self):
         sys.exit()
 
@@ -468,23 +513,233 @@ class FigWindow(QWidget):
     #|----------- Others -----------|
     #|------------------------------| 
     def plotWFs(self, justN=0):
-        #self.pWindow.plot(50*np.array(range(10)),50*np.array(range(10)), pen=None, symbol='o', symbolSize=350, symbolBrush='g', symbolPen=None)
         # No project yet, just plot yz
-        self.pWindow.clear() # might have to change to avoid clearing background every time if slow
+        #self.pWindow.clear() # might have to change to avoid clearing background every time if slow
         for i in range(nwfs):
             if type(wfs[i].WFtype) != type(None):
-                if self.satName == 'Sat1':
+                if self.satName == 'STEREO_A SECCHI_COR2':
                     ys = wfs[i].points[:,1]
                     zs = wfs[i].points[:,2]
-                elif self.satName == 'Sat2':
+                elif self.satName == 'STEREO_B SECCHI_COR2':
                     ys = wfs[i].points[:,0]
                     zs = wfs[i].points[:,2]
+                    
+                # fake projecting with plate scale to start
                 myColor =wfs[i].WFcolor
-                self.pWindow.plot(ys,zs, pen=None, symbol='o', symbolSize=3, symbolBrush=myColor, symbolPen=None)
+                
+                ys = ys * self.satStuff[self.tidx]['SCALE'] + self.satStuff[self.tidx]['SUNPIX'][0]
+                zs = zs * self.satStuff[self.tidx]['SCALE'] + self.satStuff[self.tidx]['SUNPIX'][1]
+                
+                pos = []
+                for jj in range(len(ys)):
+                    pos.append({'pos': [ys[jj], zs[jj]], 'pen':{'color':myColor, 'width':2}})
+                self.scatters[i].setData(pos)
+ 
+    def plotBackground(self):
+        #self.ui.graphWidget1.addItem(image1)
+        myIm = self.myScls2[self.tidx][self.sclidx]
+        slMin = self.MinSlider.value()
+        slMax = self.MaxSlider.value()
+        self.image.updateImage(image=myIm, levels=(slMin, slMax))
+        self.pWindow.plot(self.satStuff[self.tidx]['SUNCIRC'][0], self.satStuff[self.tidx]['SUNCIRC'][1])
+
+def makeNiceMMs(imIn, hdr):
+    # Clean out any nans
+    im = imIn.data
+    im[np.where(im == np.nan)] = 0
+    # Transpose it 
+    im = np.transpose(im)
     
+    medval = np.median(np.abs(im))
+    
+    # Linear Image
+    sclLin = 1 / medval
+    linIm  = im*sclLin
+    
+    
+    # Log Im
+    sclMed = np.median(np.abs(linIm))
+    cpLin = np.copy(linIm)
+    minVal = np.min(np.abs(linIm))
+    cpLin[np.where(cpLin < minVal)] = minVal
+    logIm = np.log(np.copy(cpLin))
+    perc95 = np.percentile(logIm, 95)
+    logIm = 100 * logIm / perc95   
+   
+    # SQRT im
+    # mostly the same as log prep
+    sqrtIm = np.sqrt(cpLin)
+    percX = np.percentile(sqrtIm, 90)
+    sqrtIm = 100 * sqrtIm / percX
+    
+    # Scale the lin img down here so others can use before
+    percX = np.percentile(linIm, 90)
+    linIm = 100 * linIm / percX
+    
+    
+    sclIms = [linIm, logIm,  sqrtIm]
+    return sclIms
+    
+def getMasks(imMap):
+    # Set up satDict as a micro header that we will package the mask in
+    # Keys are OBS, INST, POS, SCALE, CRPIX, SUNPIX, ONERSUN, MASK, SUNCIRC
+    satDict = {}
+    
+    # Get the name 
+    myhdr   = imMap.meta
+    satDict['OBS'] =  myhdr['obsrvtry']
+    
+    # PSP format
+    if myhdr['obsrvtry'] == 'Parker Solar Probe':
+        satDict['OBS'] =  myhdr['obsrvtry']
+        satDict['INST'] =  myhdr['instrume'] + '_HI' + myhdr['detector']
+        myTag   = myhdr['obsrvtry'] + '_' + myhdr['instrume'] + '_HI' + myhdr['detector']
+    # SolO format
+    elif myhdr['obsrvtry'] == 'Solar Orbiter':
+        satDict['OBS'] =  myhdr['obsrvtry']
+        satDict['INST'] = myhdr['instrume'] 
+        myTag   = myhdr['obsrvtry'] + '_' + myhdr['instrume']
+    elif myhdr['telescop'] == 'STEREO':
+        satDict['OBS'] =  myhdr['obsrvtry'] 
+        satDict['INST'] = myhdr['instrume'] + '_' + myhdr['detector']
+        myTag   = myhdr['telescop'] + '_' + myhdr['instrume'] + '_' + myhdr['detector']
+    # Other less picky sats
+    else:
+        satDict['OBS'] =  myhdr['telescop']
+        satDict['INST'] = myhdr['instrume'] + '_' + myhdr['detector']
+        myTag   = myhdr['telescop'] + '_' + myhdr['instrume'] + '_' + myhdr['detector']
+
+    # Get satellite info    
+    obsLon = imMap.observer_coordinate.lon.degree
+    obsLat = imMap.observer_coordinate.lat.degree
+    obsR = imMap.observer_coordinate.radius.m
+    satDict['POS'] = [obsLon, obsLat, obsR]
+    
+    # Plate scale in arcsec/pix
+    # Check to make sure same in x/y since we will assume as much
+    if (imMap.scale[0].to_value() != imMap.scale[1].to_value()):
+        sys.exit('xy scales not equilent. Not set up to handle this')    
+    obsScl  = imMap.scale[0].to_value()
+    satDict['SCALE'] = obsScl
+    
+    # Reference pixel
+    cx,cy = int(myhdr['crpix1'])-1, int(myhdr['crpix2'])-1
+    satDict['CRPIX'] = [cx, cy]
+    
+    # Get WCS header and pix location of Sun
+    myWCS = fitshead2wcs(myhdr)
+    centS = wcs_get_pixel(myWCS, [0.,0.])
+    sx, sy = centS[0], centS[1]
+    satDict['SUNPIX'] = [sx, sy]
+    
+    # Get size of 1 Rs in pix
+    if 'rsun' in imMap.meta:
+        myRs = imMap.meta['rsun'] # in arcsec
+    else:
+        myDist = imMap.observer_coordinate.radius.m / 7e8
+        myRs   = np.arctan2(1, myDist) * 206265
+    oners = myRs/imMap.scale[0].to_value()
+    satDict['ONERSUN'] = oners
+    
+    # Actually make the mask
+    mask = np.zeros(imMap.data.shape)
+    # Check that not SolO/PSP or STEREO HI
+    if ('HI' not in imMap.meta['detector']) & (imMap.meta['obsrvtry'] not in ['Parker Solar Probe', 'Solar Orbiter']):   
+        myOccR  = occultDict[myTag][0] # radius of the occulter in Rs
+        occRpix = int(myOccR * oners)
+        satDict['OCCRPIX'] = myOccR * oners
+        
+         # Fill in a circle around the occulter center
+        for i in range(occRpix):
+            j = int(np.sqrt(occRpix**2 - i**2))
+            lowY = np.max([0,cy-j])
+            hiY  = np.min([imMap.meta['naxis2']-2, cy+j])
+            #print (cx+i, lowY,hiY+1)
+            if cx+i <= imMap.meta['naxis2']-1:
+                mask[cx+i, lowY:hiY+1] = 1
+            if cx-i >=0:
+                mask[cx-i, lowY:hiY+1] = 1    
+    
+        # Fill in outside FoV
+        outRpix = int(occultDict[myTag][1] * oners) 
+        for i in range(imMap.meta['naxis1']):
+            myHdist = np.abs(cx-i)
+            if myHdist >= outRpix:
+                mask[i,:] = 1
+            else:
+                possY = int(np.sqrt(outRpix**2 - myHdist**2))
+                lowY = np.max([0,cy - possY])
+                hiY  = np.min([imMap.meta['naxis2'],cy + possY])
+                mask[i,:lowY+1] = 1
+                mask[i,hiY:] = 1
+        satDict['MASK'] = mask
+        
+        # Get the sun outline
+        thetas = np.linspace(0, 2.1*3.14159,100)
+        xs = oners * np.cos(thetas) + sx
+        ys = oners * np.sin(thetas) + sy
+        satDict['SUNCIRC'] = [xs, ys]
+
+    return satDict
+    
+    
+def releaseTheWombat(obsFiles, nWFs=1):
+    
+    global mainwindow, pws, nSats, wfs, nwfs, bmodes
+    
+    # obsFiles should have 1 array for each satellite
+    nSats = len(obsFiles)
+    # each sat array then [[ims], [hdrs]]
+    nwfs = nWFs
+    wfs = [wf.wireframe(None) for i in range(nWFs)]
+    
+    # Find the min/max for each type of plot range
+    sclIms = []    
+    satStuff = []
+    for i in range(nSats):
+        satScls = []
+        someStuff = []
+        for j in range(len(obsFiles[i][0])):
+            sclIm = makeNiceMMs(obsFiles[i][0][j], obsFiles[i][1][j])
+            mySatStuff = getMasks(obsFiles[i][0][j])
+            # Check if it made a mask and just use it now if so
+            if 'MASK' in mySatStuff:
+                midx = np.where(mySatStuff['MASK'] == 1)
+                for k in range(len(sclIm)):
+                    # black out all occulted
+                    sclIm[k][midx] = -100. # might need to change if adjust plot ranges
+                    # assigning sun pixels instead of just drawing on it makes disjointed so do later
+                    #sx, sy = mySatStuff['SUNCIRC'][0].astype(int), mySatStuff['SUNCIRC'][1].astype(int)
+                    #sclIm[k][sy,sx] = 200
+            satScls.append(sclIm)
+            someStuff.append(mySatStuff)
+            
+        sclIms.append(satScls)
+        satStuff.append(someStuff)
+        
+    
+    # Start the application
+    app = QApplication(sys.argv)
+    
+    # Launch obs windows
+    pws = []
+    for i in range(nSats):
+        pw = FigWindow('Sat1', obsFiles[i], sclIms[i], satStuff[i], myNum=i)
+        pw.show()
+        pws.append(pw) 
+    
+    
+    # Launch the parameter panel    
+    mainwindow = ParamWindow(nWFs)
+    mainwindow.show()
+
+    sys.exit(app.exec_())
+    
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    global mainwindow, pws, nSats, wfs, nwfs, bmodes
     
     '''screen = app.primaryScreen()
     size = screen.size()
@@ -502,7 +757,7 @@ if __name__ == "__main__":
     pw = FigWindow('Sat2', myNum=1)
     pw.show()
     pws.append(pw)
-    nwinds = len(pws)
+    nSats = len(pws)
     
 
     mainwindow = ParamWindow(3)
