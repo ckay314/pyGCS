@@ -438,9 +438,9 @@ class FigWindow(QWidget):
         layoutP.addWidget(minL, 13,0,1,9)
         self.MinSlider = QSlider()
         self.MinSlider.setOrientation(QtCore.Qt.Horizontal)
-        self.MinSlider.setMinimum(-50)
-        self.MinSlider.setMaximum(150)
-        self.MinSlider.setValue(0)
+        self.MinSlider.setMinimum(-150)
+        self.MinSlider.setMaximum(200)
+        self.MinSlider.setValue(-50)
         layoutP.addWidget(self.MinSlider, 13,3,1,9)
         self.MinSlider.valueChanged.connect(lambda x: self.s2l(x, minL, 'Min Value: '))  
         
@@ -448,9 +448,9 @@ class FigWindow(QWidget):
         layoutP.addWidget(maxL, 15,0,1,9)
         self.MaxSlider = QSlider()
         self.MaxSlider.setOrientation(QtCore.Qt.Horizontal)
-        self.MaxSlider.setMinimum(-50)
-        self.MaxSlider.setMaximum(150)
-        self.MaxSlider.setValue(100)
+        self.MaxSlider.setMinimum(-150)
+        self.MaxSlider.setMaximum(200)
+        self.MaxSlider.setValue(50)
         layoutP.addWidget(self.MaxSlider, 15,3,1,9)
         self.MaxSlider.valueChanged.connect(lambda x: self.s2l(x, maxL, 'Max Value: '))  
         
@@ -531,7 +531,10 @@ class FigWindow(QWidget):
                 if 'HI' in self.satStuff[self.tidx]['INST']:
                     obsScl = [self.satStuff[self.tidx]['SCALE'] * 3600, self.satStuff[self.tidx]['SCALE'] * 3600]
                 cent = self.satStuff[self.tidx]['SUNPIX']
-                occultR = self.satStuff[self.tidx]['OCCRARC']
+                if 'OCCRARC' in self.satStuff[self.tidx]:
+                    occultR = self.satStuff[self.tidx]['OCCRARC']
+                else:
+                    occultR = None
                 mywcs  = self.satStuff[self.tidx]['WCS']
                 myColor =wfs[i].WFcolor
                 for jj in range(len(wfs[i].points[:,0])):
@@ -553,42 +556,64 @@ class FigWindow(QWidget):
         slMin = self.MinSlider.value()
         slMax = self.MaxSlider.value()
         self.image.updateImage(image=myIm, levels=(slMin, slMax))
-        self.pWindow.plot(self.satStuff[self.tidx]['SUNCIRC'][0], self.satStuff[self.tidx]['SUNCIRC'][1])
-        self.pWindow.plot(self.satStuff[self.tidx]['SUNNORTH'][0], self.satStuff[self.tidx]['SUNNORTH'][1], symbolSize=3, symbolBrush='w', pen=pg.mkPen(color='w', width=1))
+        if 'SUNCIRC' in self.satStuff[self.tidx]:
+            self.pWindow.plot(self.satStuff[self.tidx]['SUNCIRC'][0], self.satStuff[self.tidx]['SUNCIRC'][1])
+        if 'SUNNORTH' in self.satStuff[self.tidx]:
+            self.pWindow.plot(self.satStuff[self.tidx]['SUNNORTH'][0], self.satStuff[self.tidx]['SUNNORTH'][1], symbolSize=3, symbolBrush='w', pen=pg.mkPen(color='w', width=1))
 
 def makeNiceMMs(imIn, hdr):
     # Clean out any nans
     im = imIn.data
-    im[np.where(im == np.nan)] = 0
+    
+    imNonNaN = im[~np.isnan(im)]
+    medval  = np.median(np.abs(imNonNaN))
+    
     # Transpose it 
+    im[np.isnan(im)] = 0
     im = np.transpose(im)
     
-    medval = np.median(np.abs(im))
     
     # Linear Image
     sclLin = 1 / medval
     linIm  = im*sclLin
     
     
+    xcuts = [90, 95, 90]
+    shiftIt = 0
+    # Attempt to use medval to flag HI not COR
+    if medval < 1e-20:
+        xcuts = [99.9, 99, 99]
+        linIm = linIm - np.median(linIm)
+        
+    
     # Log Im
-    sclMed = np.median(np.abs(linIm))
-    cpLin = np.copy(linIm)
-    minVal = np.min(np.abs(linIm))
-    cpLin[np.where(cpLin < minVal)] = minVal
-    logIm = np.log(np.copy(cpLin))
-    perc95 = np.percentile(logIm, 95)
+    #cpLin = np.copy(linIm)
+    minVal = np.percentile(np.abs(linIm),10)
+    pidx = np.where(linIm > minVal)
+    nidx = np.where(linIm < -minVal)
+    logIm = np.zeros(linIm.shape)
+    logIm[np.where(np.abs(linIm) < minVal)] = 1
+    logIm[pidx] = np.log(linIm[pidx] - minVal + 1)  
+    logIm[nidx] = -np.log(-linIm[nidx] - minVal + 1)  
+    
+    perc95 = np.percentile(logIm, xcuts[1])
     logIm = 100 * logIm / perc95   
    
     # SQRT im
     # mostly the same as log prep
-    sqrtIm = np.sqrt(cpLin)
-    percX = np.percentile(sqrtIm, 90)
+    pidx = np.where(linIm > 0)
+    nidx = np.where(linIm < -0)
+    sqrtIm = np.zeros(linIm.shape)
+    sqrtIm[pidx] = np.sqrt(linIm[pidx])
+    sqrtIm[nidx] = -np.sqrt(-linIm[nidx])
+    
+    percX = np.percentile(sqrtIm, xcuts[2])
     sqrtIm = 100 * sqrtIm / percX
     
     # Scale the lin img down here so others can use before
-    percX = np.percentile(linIm, 90)
+    #linIm = linIm + shiftIt
+    percX = np.percentile(linIm, xcuts[0])
     linIm = 100 * linIm / percX
-    
     
     sclIms = [linIm, logIm,  sqrtIm]
     return sclIms
