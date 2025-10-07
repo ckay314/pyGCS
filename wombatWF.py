@@ -16,7 +16,7 @@ bonusColors = ['#FF2056', '#9810FA', '#FFD230']
 # Attempting to keep theta to lon angle and phi to lat angle throughout WOMBAT
 # Everything is defined wrt to CK's Theoryland (which is Cartesian with 'nose' along x-axis
 # and largest non-radial width in the z/vertical direction for antisymmetric shapes)
-gridDict = {'GCS':[5,15,30], 'Torus':[25,15], 'Sphere':[50,25], 'Half Sphere':[25,25], 'Ellipsoid':[50,25], 'Half Ellipsoid':[25,25], 'Slab':[20,20,20]}
+gridDict = {'GCS':[5,15,30], 'Torus':[30,25], 'Sphere':[50,25], 'Half Sphere':[25,25], 'Ellipsoid':[50,25], 'Half Ellipsoid':[25,25], 'Slab':[20,20,20]}
 
 
 
@@ -286,7 +286,7 @@ class wireframe():
             xyz = np.array([xs, ys, zs])
             
             # Convert from theoryland to StonyCart
-            self.points = np.transpose(rotz(roty(rotx(xyz, ps[3]), -ps[2]), ps[1])) 
+            self.points = np.transpose(rotz(roty(rotx(xyz,  90-ps[3]), -ps[2]), ps[1])) 
             
 
         # |---------------------------|

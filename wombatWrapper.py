@@ -52,4 +52,4 @@ if hdrs[1]['DETECTOR'] not in ['HI1', 'HI2']:
      diff2 = sunpy.map.Map(diff2, hdrs2[1])
 
 
-releaseTheWombat([[[diff],[hdrs[1]]], [[diff2],[hdrs2[1]]]])
+releaseTheWombat([[[diff],[hdrs[1]]], [[diff2],[hdrs2[1]]]], nWFs=3)

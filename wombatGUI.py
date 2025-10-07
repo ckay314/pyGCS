@@ -7,8 +7,11 @@ from matplotlib.figure import Figure
 import wombatWF as wf
 import pyqtgraph as pg
 
-from wcs_funs import fitshead2wcs, wcs_get_pixel
+from astropy.coordinates import SkyCoord
 
+
+from wcs_funs import fitshead2wcs, wcs_get_pixel
+#from GCSgui import pts2proj
 
 import logging
 logging.basicConfig(level='INFO')
@@ -314,6 +317,8 @@ class ParamWindow(QMainWindow):
             wfs[idx] = wf.wireframe(None)
             self.tab_widget.setTabText(idx,'None')
             thisLay = self.cleanLayout(self.WFLays[idx])
+            for aPW in pws:
+                aPW.scatters[idx].setData([])
         else:
             # Create a new wf object but pass it any matching
             # parameters from the previous version
@@ -409,7 +414,7 @@ class FigWindow(QWidget):
         # make an image item
         self.image = pg.ImageItem()
         self.pWindow.addItem(self.image)
-        #self.pWindow.setRange(xRange=(0,myObs[0][0].data.shape[0]), yRange=(0,myObs[0][0].data.shape[1]), padding=0)
+        self.pWindow.setRange(xRange=(0,myObs[0][0].data.shape[0]), yRange=(0,myObs[0][0].data.shape[1]), padding=0)
         
         # Hide the axes
         self.pWindow.hideAxis('bottom')
@@ -418,7 +423,7 @@ class FigWindow(QWidget):
         # Set up scatters for the WF points so can adjust without clearing
         self.scatters = []
         for i in range(nwfs):
-            aScat = pg.ScatterPlotItem(pen=pg.mkPen(width=1, color='g'), symbol='o', size=2)
+            aScat = pg.ScatterPlotItem(pen=pg.mkPen(width=1, color='g'), brush=pg.mkBrush(color='g'),symbol='o', size=2.5)
             self.scatters.append(aScat)
             self.pWindow.addItem(aScat)
         
@@ -513,26 +518,33 @@ class FigWindow(QWidget):
     #|----------- Others -----------|
     #|------------------------------| 
     def plotWFs(self, justN=0):
-        # No project yet, just plot yz
-        #self.pWindow.clear() # might have to change to avoid clearing background every time if slow
+        # This is the slow version but keeping syntax around if need to check anything
+        #skyPt = SkyCoord(x=0, y=0, z=1, unit='R_sun', representation_type='cartesian', frame='heliographic_stonyhurst')
+        #myPt2 = self.OGims[self.tidx].world_to_pixel(skyPt)
+        
         for i in range(nwfs):
-            if type(wfs[i].WFtype) != type(None):
-                if self.satName == 'STEREO_A SECCHI_COR2':
-                    ys = wfs[i].points[:,1]
-                    zs = wfs[i].points[:,2]
-                elif self.satName == 'STEREO_B SECCHI_COR2':
-                    ys = wfs[i].points[:,0]
-                    zs = wfs[i].points[:,2]
-                    
-                # fake projecting with plate scale to start
-                myColor =wfs[i].WFcolor
-                
-                ys = ys * self.satStuff[self.tidx]['SCALE'] + self.satStuff[self.tidx]['SUNPIX'][0]
-                zs = zs * self.satStuff[self.tidx]['SCALE'] + self.satStuff[self.tidx]['SUNPIX'][1]
-                
+            if type(wfs[i].WFtype) != type(None):                
+                # Set up the input parameters for pts2proj
                 pos = []
-                for jj in range(len(ys)):
-                    pos.append({'pos': [ys[jj], zs[jj]], 'pen':{'color':myColor, 'width':2}})
+                obs = self.satStuff[self.tidx]['POS']
+                obsScl = [self.satStuff[self.tidx]['SCALE'], self.satStuff[self.tidx]['SCALE']]
+                if 'HI' in self.satStuff[self.tidx]['INST']:
+                    obsScl = [self.satStuff[self.tidx]['SCALE'] * 3600, self.satStuff[self.tidx]['SCALE'] * 3600]
+                cent = self.satStuff[self.tidx]['SUNPIX']
+                occultR = self.satStuff[self.tidx]['OCCRARC']
+                mywcs  = self.satStuff[self.tidx]['WCS']
+                myColor =wfs[i].WFcolor
+                for jj in range(len(wfs[i].points[:,0])):
+                    pt = wfs[i].points[jj,:]
+                    r = np.sqrt(pt[0]**2 + pt[1]**2 + pt[2]**2)
+                    lat = np.arcsin(pt[2]/r) * 180/np.pi
+                    lon = np.arctan2(pt[1],pt[0]) * 180 / np.pi
+                    pt = [lat, lon, r*7e8]
+                    myPt = pts2proj(pt, obs, obsScl, mywcs, center=cent, occultR=occultR)
+                    if len(myPt) > 0:          
+                        pos.append({'pos': [myPt[0][0], myPt[0][1]], 'pen':{'color':myColor, 'width':1}, 'pen':{'color':myColor}})
+                        
+                    #pos.append({'pos': [ys[jj], zs[jj]], 'pen':{'color':myColor, 'width':2}})
                 self.scatters[i].setData(pos)
  
     def plotBackground(self):
@@ -542,6 +554,7 @@ class FigWindow(QWidget):
         slMax = self.MaxSlider.value()
         self.image.updateImage(image=myIm, levels=(slMin, slMax))
         self.pWindow.plot(self.satStuff[self.tidx]['SUNCIRC'][0], self.satStuff[self.tidx]['SUNCIRC'][1])
+        self.pWindow.plot(self.satStuff[self.tidx]['SUNNORTH'][0], self.satStuff[self.tidx]['SUNNORTH'][1], symbolSize=3, symbolBrush='w', pen=pg.mkPen(color='w', width=1))
 
 def makeNiceMMs(imIn, hdr):
     # Clean out any nans
@@ -580,9 +593,10 @@ def makeNiceMMs(imIn, hdr):
     sclIms = [linIm, logIm,  sqrtIm]
     return sclIms
     
-def getMasks(imMap):
+def getSatStuff(imMap):
     # Set up satDict as a micro header that we will package the mask in
-    # Keys are OBS, INST, POS, SCALE, CRPIX, SUNPIX, ONERSUN, MASK, SUNCIRC
+    # Keys are OBS, INST, POS, SCALE, CRPIX, WCS, SUNPIX, ONERSUN, MASK
+    # OCCRPIX, OCCRARC, SUNCIRC, SUNNORTH
     satDict = {}
     
     # Get the name 
@@ -613,7 +627,7 @@ def getMasks(imMap):
     obsLon = imMap.observer_coordinate.lon.degree
     obsLat = imMap.observer_coordinate.lat.degree
     obsR = imMap.observer_coordinate.radius.m
-    satDict['POS'] = [obsLon, obsLat, obsR]
+    satDict['POS'] = [obsLat, obsLon,  obsR]
     
     # Plate scale in arcsec/pix
     # Check to make sure same in x/y since we will assume as much
@@ -628,6 +642,7 @@ def getMasks(imMap):
     
     # Get WCS header and pix location of Sun
     myWCS = fitshead2wcs(myhdr)
+    satDict['WCS'] = myWCS
     centS = wcs_get_pixel(myWCS, [0.,0.])
     sx, sy = centS[0], centS[1]
     satDict['SUNPIX'] = [sx, sy]
@@ -648,6 +663,7 @@ def getMasks(imMap):
         myOccR  = occultDict[myTag][0] # radius of the occulter in Rs
         occRpix = int(myOccR * oners)
         satDict['OCCRPIX'] = myOccR * oners
+        satDict['OCCRARC'] = myOccR * oners * imMap.scale[0].to_value()
         
          # Fill in a circle around the occulter center
         for i in range(occRpix):
@@ -679,10 +695,82 @@ def getMasks(imMap):
         xs = oners * np.cos(thetas) + sx
         ys = oners * np.sin(thetas) + sy
         satDict['SUNCIRC'] = [xs, ys]
+        
+        # Get the north line
+        skyPt = SkyCoord(x=0, y=0, z=1, unit='R_sun', representation_type='cartesian', frame='heliographic_stonyhurst')
+        myPt2 = imMap.world_to_pixel(skyPt)
+        satDict['SUNNORTH'] = [[sx, myPt2[0].to_value()], [sy, myPt2[1].to_value()]]
 
     return satDict
     
     
+def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None):
+    #  
+    # Take in a list of points and an observer location and project into pixel coordinates
+    # Expect pts as [lat, lon, r] in [deg, deg, x] where x doesn't matter as long as consistent
+    # In theory can be in any 3D sphere system as long as consistent across all pts (inc obs) 
+    # Scale should either be a single value or [scalex, scaley] !!! yes this is oppo of lat/lon input 
+    #   order but this is how CK's brain works
+    # occultR is an angle, either arcsec/deg to match scale
+    
+    # Useful constants 
+    rad2arcsec = 206265
+    dtor = np.pi / 180.
+    
+    # check inputs and reformat as 2D array (even if single pt)
+    if isinstance(pts_in, list):
+        pts_in = np.array(pts_in)
+    
+    if len(pts_in.shape) == 1:
+        pts_in = np.array([pts_in])
+    
+    
+    # convert all the pts to radians
+    pts_lats = pts_in[:,0]*dtor 
+    pts_lons = pts_in[:,1]*dtor 
+    pts_rs   = pts_in[:,2]
+
+    # convert obs location
+    obs_lat = obs[0]*dtor
+    obs_lon = obs[1]*dtor
+    obs_r   = obs[2]
+    
+    # define dLon var as short hand
+    dLon = pts_lons - obs_lon
+    
+    # Convert from Stony heliographic (or something similar) to heliocentric cartesian
+    # this is with x to right, y up, z toward obs
+    x = pts_rs  * np.cos(pts_lats) * np.sin(dLon)
+    y = pts_rs * (np.sin(pts_lats) * np.cos(obs_lat) - np.cos(pts_lats)*np.cos(dLon)*np.sin(obs_lat))
+    z = pts_rs * (np.sin(pts_lats) * np.sin(obs_lat) + np.cos(pts_lats)*np.cos(dLon)*np.cos(obs_lat))
+        
+    # Convert to projected vals
+    d = np.sqrt(x**2 +  y**2 + (obs_r-z)**2)
+    if mywcs['cunit'][0].lower() == 'arcsec':
+        rad2unit = rad2arcsec
+    elif mywcs['cunit'][0].lower() == 'deg':
+        rad2unit = 180. / np.pi
+    dthetax = np.arctan2(x, obs_r - z) * rad2unit 
+    dthetay = np.arcsin(y/d)* rad2unit 
+        
+    coord = wcs_get_pixel(mywcs, [dthetax, dthetay], doQuick=False)
+    
+    # Check if we want to throw out the points that would be behind the occulter
+    outs = np.array([coord[0,:], coord[1,:]]).transpose()
+    thetax, thetay = coord[0,:], coord[1,:]
+        
+    if occultR: 
+        dProj = np.sqrt(dthetax**2 +  dthetay**2)
+        outs = []
+        for i in range(len(d)):
+            if (dProj[i] > occultR) or (z[i] > 0):
+                outs.append([thetax[i], thetay[i]])
+        outs = np.array(outs)
+    else:
+        # repackage as array of [ [pixX1, pixY1], [pixX2, pixY2], ...]
+        outs = np.array([thetax, thetay]).transpose()
+    return outs
+
 def releaseTheWombat(obsFiles, nWFs=1):
     
     global mainwindow, pws, nSats, wfs, nwfs, bmodes
@@ -701,7 +789,7 @@ def releaseTheWombat(obsFiles, nWFs=1):
         someStuff = []
         for j in range(len(obsFiles[i][0])):
             sclIm = makeNiceMMs(obsFiles[i][0][j], obsFiles[i][1][j])
-            mySatStuff = getMasks(obsFiles[i][0][j])
+            mySatStuff = getSatStuff(obsFiles[i][0][j])
             # Check if it made a mask and just use it now if so
             if 'MASK' in mySatStuff:
                 midx = np.where(mySatStuff['MASK'] == 1)
