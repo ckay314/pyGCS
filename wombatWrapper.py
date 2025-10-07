@@ -49,7 +49,7 @@ fnameB2 = 'fits/20120713_072901_s4h1A.fts'
 
 
 # SoloHI
-'''file1A = '/Users/kaycd1/wombat/fits/solo_L2_solohi-1ft_20220329T053609_V02.fits'
+file1A = '/Users/kaycd1/wombat/fits/solo_L2_solohi-1ft_20220329T053609_V02.fits'
 file2A = '/Users/kaycd1/wombat/fits/solo_L2_solohi-2ft_20220329T053809_V02.fits'
 file3A = '/Users/kaycd1/wombat/fits/solo_L2_solohi-3fg_20220329T054157_V02.fits'
 file4A = '/Users/kaycd1/wombat/fits/solo_L2_solohi-4fg_20220329T055357_V02.fits'
@@ -58,10 +58,9 @@ file1B = '/Users/kaycd1/wombat/fits/solo_L2_solohi-1ft_20220329T052409_V02.fits'
 file2B = '/Users/kaycd1/wombat/fits/solo_L2_solohi-2ft_20220329T052609_V02.fits'
 file3B = '/Users/kaycd1/wombat/fits/solo_L2_solohi-3fg_20220329T051757_V02.fits'
 file4B = '/Users/kaycd1/wombat/fits/solo_L2_solohi-4fg_20220329T052957_V02.fits'
-'''
 
-fnameC1 = '/Users/kaycd1/wombat/fits/solo_L2_solohi-4fg_20220329T052957_V02.fits'
-fnameC2 = '/Users/kaycd1/wombat/fits/solo_L2_solohi-4fg_20220329T055357_V02.fits'
+#fnameC1 = '/Users/kaycd1/wombat/fits/solo_L2_solohi-4fg_20220329T052957_V02.fits'
+#fnameC2 = '/Users/kaycd1/wombat/fits/solo_L2_solohi-4fg_20220329T055357_V02.fits'
 
 
 # STEREO
@@ -92,15 +91,15 @@ for hdr in hdrs2:
 diff2 = sunpy.map.Map(diff2, hdrs2[1])'''
 
 # SolO Quad
-'''aPair = [[file1B, file2B, file3B, file4B], [file1A, file2A, file3A, file4A]]
+aPair = [[file1B, file2B, file3B, file4B], [file1A, file2A, file3A, file4A]]
 im0, hdr0 = solohi_fits2grid(aPair[0])
 im1, hdr1 = solohi_fits2grid(aPair[1])
 diff2 = im1 - im0
 hdrs2 = [hdr0, hdr1] 
-diff2 = sunpy.map.Map(diff2, hdrs2[1])'''
+diff2 = sunpy.map.Map(diff2, hdrs2[1])
 
 # SolO single (or anything fully prepped)
-aPair = [fnameC1, fnameC2]
+'''aPair = [fnameC1, fnameC2]
 with fits.open(aPair[0]) as hdulist:
     im1  = hdulist[0].data
     hdr1 = hdulist[0].header
@@ -109,8 +108,8 @@ with fits.open(aPair[1]) as hdulist:
     hdr2 = hdulist[0].header
 diff2 = im2 - im1
 hdrs2 = [hdr1, hdr2]
-diff2 = sunpy.map.Map(diff2, hdrs2[1])
+diff2 = sunpy.map.Map(diff2, hdrs2[1])'''
 
 
 
-releaseTheWombat([[[diff],[hdrs[1]]], [[diff2],[hdrs2[1]]]], nWFs=3)
+releaseTheWombat([[[diff],[hdrs[1]]], [[diff2],[hdrs2[1]]]], nWFs=4)

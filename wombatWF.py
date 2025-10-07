@@ -16,7 +16,7 @@ bonusColors = ['#FF2056', '#9810FA', '#FFD230']
 # Attempting to keep theta to lon angle and phi to lat angle throughout WOMBAT
 # Everything is defined wrt to CK's Theoryland (which is Cartesian with 'nose' along x-axis
 # and largest non-radial width in the z/vertical direction for antisymmetric shapes)
-gridDict = {'GCS':[5,15,30], 'Torus':[30,25], 'Sphere':[50,25], 'Half Sphere':[25,25], 'Ellipsoid':[50,25], 'Half Ellipsoid':[25,25], 'Slab':[20,20,20]}
+gridDict = {'GCS':[5,15,30], 'Torus':[30,25], 'Sphere':[50,25], 'Half Sphere':[25,25], 'Ellipsoid':[50,25], 'Half Ellipsoid':[25,25], 'Slab':[10,5,10]}
 
 
 
@@ -34,7 +34,7 @@ rngDict = {'Height (Rs)':[1,25], 'Lon (deg)':[-180,180], 'Lat (deg)':[-90,90], '
 rngDictHI = {'Height (Rs)':[1,215], 'Lx (Rs)':[0,215], 'Ly (Rs)':[0,215], 'Lz (Rs)':[0,215]}
 
 # The default values for each parameter (again COR appropriate)
-defDict = {'Height (Rs)':10, 'Lon (deg)':0, 'Lat (deg)':0, 'Tilt (deg)':0, 'AW (deg)':30, 'AW_FO (deg)':40, 'AW_EO (deg)':15, 'kappa':0.3, 'deltaAx':1, 'deltaCS':1, 'ecc1':0.8, 'ecc2':0.5, 'Roll (deg)':0, 'Yaw (deg)':0, 'Pitch (deg)':0, 'Lx (Rs)':10, 'Ly (Rs)':4, 'Lz (Rs)':10}
+defDict = {'Height (Rs)':10, 'Lon (deg)':0, 'Lat (deg)':0, 'Tilt (deg)':0, 'AW (deg)':30, 'AW_FO (deg)':40, 'AW_EO (deg)':15, 'kappa':0.3, 'deltaAx':1, 'deltaCS':1, 'ecc1':0.8, 'ecc2':0.7, 'Roll (deg)':0, 'Yaw (deg)':0, 'Pitch (deg)':0, 'Lx (Rs)':10, 'Ly (Rs)':4, 'Lz (Rs)':10}
 
 # The HI values
 defDictHI = {'Height (Rs)':50, 'Lx (Rs)':50, 'Ly (Rs)':10, 'Lz (Rs)':50}
@@ -361,36 +361,31 @@ class wireframe():
             # Make each of the six faces and appends to long lists
             totPts = 2*(nx*ny + ny*nz + nz*nx)
             xs, ys, zs = [], [], []
-            
-            # front
-            xs.append(np.array([xrs[-1]]*ny*nz).reshape(-1))
-            ys.append(np.array([[yrs]*nz]).reshape(-1))
-            zs.append(np.array([[[zrs[i]]*ny for i in range(nz)]]).reshape(-1))
-            # back
-            xs.append(np.array([xrs[0]]*ny*nz).reshape(-1))
-            ys.append(np.array([[yrs]*nz]).reshape(-1))
-            zs.append(np.array([[[zrs[i]]*ny for i in range(nz)]]).reshape(-1))
-            # left
-            ys.append(np.array([yrs[0]]*nx*nz).reshape(-1))
-            xs.append(np.array([[xrs]*nz]).reshape(-1))
-            zs.append(np.array([[[zrs[i]]*nx for i in range(nz)]]).reshape(-1))
-            # right
-            ys.append(np.array([yrs[-1]]*nx*nz).reshape(-1))
-            xs.append(np.array([[xrs]*nz]).reshape(-1))
-            zs.append(np.array([[[zrs[i]]*nx for i in range(nz)]]).reshape(-1))
-            # bottom
-            zs.append(np.array([zrs[0]]*nx*ny).reshape(-1))
-            xs.append(np.array([[xrs]*ny]).reshape(-1))
-            ys.append(np.array([[[yrs[i]]*nx for i in range(ny)]]).reshape(-1))
-            # top
-            zs.append(np.array([zrs[-1]]*nx*ny).reshape(-1))
-            xs.append(np.array([[xrs]*ny]).reshape(-1))
-            ys.append(np.array([[[yrs[i]]*nx for i in range(ny)]]).reshape(-1))
-            
-            xs = np.array(xs).reshape(-1)
-            ys = np.array(ys).reshape(-1)
-            zs = np.array(zs).reshape(-1)
-            
+            onex = np.ones(nx)
+            oney = np.ones(ny)
+            onez = np.ones(nz)
+            onexy = np.ones(nx*ny)
+            oneyz = np.ones(ny*nz)
+            onexz = np.ones(nx*nz)
+            # front/back
+            xs = np.concatenate((xs, xrs[-1] * oneyz))
+            xs = np.concatenate((xs, xrs[0] * oneyz))
+            for iii in range(2*nz): 
+                ys = np.concatenate((ys, yrs))
+                zs = np.concatenate((zs, zrs[iii%nz]*oney))
+            # left/right
+            ys = np.concatenate((ys, yrs[-1] * onexz))
+            ys = np.concatenate((ys, yrs[0] * onexz))
+            for iii in range(2*nx): 
+                zs = np.concatenate((zs, zrs))
+                xs = np.concatenate((xs, xrs[iii%nx]*onez))
+                
+            # top/bottom
+            zs = np.concatenate((zs, zrs[-1] * onexy))
+            zs = np.concatenate((zs, zrs[0] * onexy))
+            for iii in range(2*ny): 
+                xs = np.concatenate((xs, xrs))
+                ys = np.concatenate((ys, yrs[iii%ny]*onex))
             
             xyz = np.array([xs, ys, zs])
             
