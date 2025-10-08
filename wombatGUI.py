@@ -10,7 +10,7 @@ import pyqtgraph as pg
 from astropy.coordinates import SkyCoord
 
 
-from wcs_funs import fitshead2wcs, wcs_get_pixel
+from wcs_funs import fitshead2wcs, wcs_get_pixel, wcs_get_coord
 #from GCSgui import pts2proj
 
 import logging
@@ -40,7 +40,8 @@ class ParamWindow(QMainWindow):
             
         self.nTabs = nTabs
         self.setWindowTitle('Wombat Parameters')
-        self.setGeometry(100, 100, 300, 900)
+        self.setGeometry(100, 100, 300, 950)
+        self.setFixedSize(300, 950) 
 
         # Create a QTabWidget
         self.tab_widget = QTabWidget()
@@ -84,12 +85,12 @@ class ParamWindow(QMainWindow):
         
         # Time slider/label
         Tlabel = QLabel('Time selection ')
-        layout.addWidget(Tlabel,0,0,1,11,alignment=QtCore.Qt.AlignCenter)
+        layout.addWidget(Tlabel,0,0,1,10,alignment=QtCore.Qt.AlignCenter)
         
         slider1 = QSlider()
         #slider1.setGeometry(QtCore.QRect(0, 100, 160, 25))
         slider1.setOrientation(QtCore.Qt.Horizontal)
-        layout.addWidget(slider1, 1,1,1,11)
+        layout.addWidget(slider1, 1,0,1,11)
 
         label = QLabel('Wireframe Type')
         layout.addWidget(label, 2,0,1,11,alignment=QtCore.Qt.AlignCenter)
@@ -98,27 +99,28 @@ class ParamWindow(QMainWindow):
         cbox = self.wfComboBox(i)
         layout.addWidget(cbox,3,0,1,11,alignment=QtCore.Qt.AlignCenter)
         
-        label = QLabel('Wireframe Parameters')
-        layout.addWidget(label, 5,0, 1, 11, alignment=QtCore.Qt.AlignCenter)
+        label = QLabel('Parameters')
+        layout.addWidget(label, 5,0, 1, 5,alignment=QtCore.Qt.AlignCenter)
         
-        # Dummy empty label to space it nicely before making wireframe specific
-        #label = QLabel('')
-        #layout.addWidget(label, 6,1,20,1)
+        hideBut = QPushButton('Show/Hide WF')
+        hideBut.released.connect(lambda: self.HBclicked(i))
+        layout.addWidget(hideBut, 5, 6, 1,5)
+        
         
         # Put a layout within the layout for the slider friends
         # It's like inception but without Elliot Page explaining everything
         WFLay = QGridLayout()
-        layout.addLayout(WFLay, 7,1,25,11)
+        layout.addLayout(WFLay, 7,0,25,11)
         
         
         # Background mode drop down box
-        label = QLabel('Background Scaling Type')
-        layout.addWidget(label, 40,0,1,11,alignment=QtCore.Qt.AlignCenter)
+        label = QLabel('Background Scaling')
+        layout.addWidget(label, 41,0,1,6,alignment=QtCore.Qt.AlignCenter)
         cbox = self.bgComboBox()
-        layout.addWidget(cbox,41,0,1,11,alignment=QtCore.Qt.AlignCenter)
+        layout.addWidget(cbox,41,5,1,6,alignment=QtCore.Qt.AlignCenter)
         
         label = QLabel('')
-        layout.addWidget(label, 40,0,2,11,alignment=QtCore.Qt.AlignCenter)
+        layout.addWidget(label, 42,0,2,11,alignment=QtCore.Qt.AlignCenter)
         
 
         saveBut = QPushButton('Save')
@@ -297,20 +299,20 @@ class ParamWindow(QMainWindow):
         b.setText(temp)
         self.updateWFpoints(myWF, widges)
         
+        
     def cb_index_changed(self, a='None',idx=-10):
         self.WFtypes[idx] = a
 
         # Check if making a new wf
         if type(wfs[idx].WFtype) == type(None):
             myType = self.WFnum2type[a]
-            wfs[idx] = wf.wireframe(myType)
+            wfs[idx] = wf.wireframe(myType, WFidx=idx+1)
             self.tab_widget.setTabText(idx,self.WFshort[myType])
             
             WFLay, widges = self.WFparamLayout(wfs[idx])
                         
-            self.layouts[idx].addLayout(WFLay, 7,1,30,11)
+            self.layouts[idx].addLayout(WFLay, 7,0,30,11)
             self.WFLays[idx] = WFLay
-
             
         elif a == 0:
             # Set back to none if didn't select a WF
@@ -325,7 +327,7 @@ class ParamWindow(QMainWindow):
             ogLabs = wfs[idx].labels
             ogParams = wfs[idx].params
             myType = self.WFnum2type[a]
-            newWF = wf.wireframe(self.WFnum2type[a])
+            newWF = wf.wireframe(self.WFnum2type[a], WFidx=idx+1)
             newLabs = newWF.labels
             for iii in range(len(ogLabs)):
                 aLab = ogLabs[iii]
@@ -339,7 +341,7 @@ class ParamWindow(QMainWindow):
             # Update the slider layout
             thisLay = self.cleanLayout(self.WFLays[idx])
             WFLay, widges = self.WFparamLayout(newWF)
-            self.layouts[idx].addLayout(WFLay, 7,1,30,11)
+            self.layouts[idx].addLayout(WFLay, 7,0,30,11)
             self.WFLays[idx] = WFLay
            
             # Give the structure the new wf
@@ -347,7 +349,7 @@ class ParamWindow(QMainWindow):
             
         for aPW in pws:
             aPW.plotBackground()
-            aPW.plotWFs()
+            aPW.plotWFs(justN=idx)
             
     def back_changed(self,text):
         for aPW in pws:
@@ -355,6 +357,16 @@ class ParamWindow(QMainWindow):
             
     def EBclicked(self):
         sys.exit()
+
+    def HBclicked(self, i):
+        if wfs[i].showMe: 
+            wfs[i].showMe = False
+            for aPW in pws:
+                aPW.scatters[i].setData([])
+        else:
+            wfs[i].showMe = True
+            for aPW in pws:
+                aPW.plotWFs(justN=i)
 
     def SBclicked(self):
         print('Save not coded yet')
@@ -384,7 +396,9 @@ class ParamWindow(QMainWindow):
         if not flagIt:
             aWF.getPoints()
             for ipw in range(nSats):
-                pws[ipw].plotWFs()
+                pws[ipw].plotWFs(justN=aWF.WFidx-1)
+            if ovw:
+                ovw.updateArrow(aWF.WFidx-1,color=aWF.WFcolor)
     
         
 class FigWindow(QWidget):
@@ -428,7 +442,7 @@ class FigWindow(QWidget):
             self.pWindow.addItem(aScat)
         
         # Background mode drop down box
-        label = QLabel('Background Scaling Type')
+        label = QLabel('Background Scaling')
         layoutP.addWidget(label, 12,0,1,5,alignment=QtCore.Qt.AlignCenter)
         self.cbox = self.bgComboBox()
         layoutP.addWidget(self.cbox,12,5,1,5,alignment=QtCore.Qt.AlignCenter)
@@ -522,8 +536,13 @@ class FigWindow(QWidget):
         #skyPt = SkyCoord(x=0, y=0, z=1, unit='R_sun', representation_type='cartesian', frame='heliographic_stonyhurst')
         #myPt2 = self.OGims[self.tidx].world_to_pixel(skyPt)
         
-        for i in range(nwfs):
-            if type(wfs[i].WFtype) != type(None):                
+        toDo = range(nwfs)
+        if justN:
+            toDo = [justN]
+            
+        for i in toDo:
+            if wfs[i].showMe & (type(wfs[i].WFtype) != type(None)):    
+            #if type(wfs[i].WFtype) != type(None):                
                 # Set up the input parameters for pts2proj
                 pos = []
                 obs = self.satStuff[self.tidx]['POS']
@@ -547,8 +566,9 @@ class FigWindow(QWidget):
                     if len(myPt) > 0:          
                         pos.append({'pos': [myPt[0][0], myPt[0][1]], 'pen':{'color':myColor, 'width':1}, 'pen':{'color':myColor}})
                         
-                    #pos.append({'pos': [ys[jj], zs[jj]], 'pen':{'color':myColor, 'width':2}})
                 self.scatters[i].setData(pos)
+                
+
  
     def plotBackground(self):
         #self.ui.graphWidget1.addItem(image1)
@@ -560,6 +580,86 @@ class FigWindow(QWidget):
             self.pWindow.plot(self.satStuff[self.tidx]['SUNCIRC'][0], self.satStuff[self.tidx]['SUNCIRC'][1])
         if 'SUNNORTH' in self.satStuff[self.tidx]:
             self.pWindow.plot(self.satStuff[self.tidx]['SUNNORTH'][0], self.satStuff[self.tidx]['SUNNORTH'][1], symbolSize=3, symbolBrush='w', pen=pg.mkPen(color='w', width=1))
+
+
+
+class OverviewWindow(QWidget):
+    def __init__(self, satStuff):
+        super().__init__()
+        # Shows the position of the satellites and the slider longitude
+        self.setFixedSize(400, 400) 
+        self.setWindowTitle('Polar View')
+
+        layoutOV =  QGridLayout()
+        
+        self.pWindow = pg.PlotWidget()
+        self.pWindow.setMinimumSize(350, 350)
+        layoutOV.addWidget(self.pWindow,0,0,11,11,alignment=QtCore.Qt.AlignCenter)
+        
+        # make an image item
+        #self.image = pg.ImageItem()
+        #self.pWindow.addItem(self.image)
+        self.pWindow.setRange(xRange=(-1.2, 1.2), yRange=(-1.2,1.2), padding=0)
+        
+        #self.pWindow.plot([-1,1], [-1,1])
+        twopi = np.linspace(0, 2.01*np.pi, 200)
+        x_data = np.cos(twopi)
+        y_data = np.sin(twopi)
+        self.pWindow.plot(x_data, y_data, pen=pg.mkPen('w', width=3))
+        self.pWindow.plot([0], [0], symbol='o', symbolSize=20, symbolBrush=pg.mkBrush(color='y'))
+        self.pWindow.plot([0], [-1], symbol='o', symbolSize=15, symbolBrush=pg.mkBrush(color='blue'))
+        
+        # Hide the axes
+        self.pWindow.hideAxis('bottom')
+        self.pWindow.hideAxis('left')
+        
+        
+        # Set up scatters for the sat points so can adjust without clearing
+        self.scatters = []
+        for i in range(nSats):
+            # would be good to update this to adjust with time
+            myPos = satStuff[i][0]['POS']
+            myName = satStuff[i][0]['OBS']
+            myR = myPos[2] / 1.496e+11 
+            myLon = myPos[1] * np.pi / 180.
+            y = - myR * np.cos(myLon)
+            x = myR * np.sin(myLon)
+            aScat = pg.ScatterPlotItem(pen=pg.mkPen(width=1, color='w'), brush=pg.mkBrush(color='w'),symbol='o', size=8)
+            
+            self.scatters.append(aScat)
+            pos = []
+            pos.append({'pos': [x,y]})
+            self.scatters[i].setData(pos)
+            self.pWindow.addItem(aScat)
+        
+        # Set up arrow for the WF lons
+        self.arrows = []
+        for i in range(nwfs):
+            arrow = pg.ArrowItem(angle=-45, tipAngle=0, headLen=0, tailLen=0, tailWidth=0, pen={'color': 'w', 'width': 2}, brush='b')
+            arrow.setPos(0, 0)
+            self.pWindow.addItem(arrow)
+            self.arrows.append(arrow)
+        self.setLayout(layoutOV)
+    
+    def updateArrow(self, i, color='w'):
+        mywf = wfs[i]
+        lon  = mywf.params[1]
+        rlon = lon * np.pi /180.
+        hL, tL = 0.1, 0.3
+        aL = hL+tL
+        xh = aL * np.sin(rlon)
+        yh = -aL * np.cos(rlon)
+        ang = -np.arctan2(yh, xh) * 180 / np.pi
+        
+        self.arrows[i].setStyle(angle=lon-270, headWidth=0.05, headLen=hL, tailLen=tL, tailWidth=0.03, pxMode=False,  pen={'color': color, 'width': 2}, brush=color)
+        tail_len = self.arrows[i].opts['tailLen']
+        self.arrows[i].setPos(xh, yh)
+        
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key_Q: 
+            self.close()
+        elif event.key() == QtCore.Qt.Key_Escape:
+            sys.exit()
 
 def makeNiceMMs(imIn, hdr):
     # Clean out any nans
@@ -621,7 +721,7 @@ def makeNiceMMs(imIn, hdr):
 def getSatStuff(imMap):
     # Set up satDict as a micro header that we will package the mask in
     # Keys are OBS, INST, POS, SCALE, CRPIX, WCS, SUNPIX, ONERSUN, MASK
-    # OCCRPIX, OCCRARC, SUNCIRC, SUNNORTH
+    # OCCRPIX, OCCRARC, SUNCIRC, SUNNORTH, OBSTYPE, FOV
     satDict = {}
     
     # Get the name 
@@ -647,6 +747,23 @@ def getSatStuff(imMap):
         satDict['OBS'] =  myhdr['telescop']
         satDict['INST'] = myhdr['instrume'] + '_' + myhdr['detector']
         myTag   = myhdr['telescop'] + '_' + myhdr['instrume'] + '_' + myhdr['detector']
+        
+    # Obs type - flag between HI, COR, EUV
+    if satDict['OBS'] in ['Parker Solar Probe', 'Solar Orbiter']:
+        satDict['OBSTYPE'] = 'HI'
+    elif satDict['OBS'] in ['STEREO_A', 'STEREO_B']:
+        if myhdr['instrume'] in ['COR1', 'COR2']:
+            satDict['OBSTYPE'] = 'COR'
+        elif myhdr['instrume'] in ['HI1', 'HI2']:
+            satDict['OBSTYPE'] = 'HI'
+        else:
+            satDict['OBSTYPE'] = 'EUV'
+    elif satDict['OBS'] == 'SOHO':
+        if myhdr['detector'] in ['C2', 'C3']:
+            satDict['OBSTYPE'] = 'COR'
+        else:
+            satDict['OBSTYPE'] = 'EUV'
+        
 
     # Get satellite info    
     obsLon = imMap.observer_coordinate.lon.degree
@@ -672,6 +789,7 @@ def getSatStuff(imMap):
     sx, sy = centS[0], centS[1]
     satDict['SUNPIX'] = [sx, sy]
     
+    
     # Get size of 1 Rs in pix
     if 'rsun' in imMap.meta:
         myRs = imMap.meta['rsun'] # in arcsec
@@ -680,6 +798,16 @@ def getSatStuff(imMap):
         myRs   = np.arctan2(1, myDist) * 206265
     oners = myRs/imMap.scale[0].to_value()
     satDict['ONERSUN'] = oners
+    
+    # Get location of edges
+    myFOV = 0
+    for i in [0,-1]:
+        for j in [0,-1]:
+            coord = wcs_get_coord(myWCS, pixels = np.array([i,j]))
+            edgeR = np.sqrt(coord[0]**2 + coord[1]**2)
+            thisFOV = edgeR / obsScl / oners
+            if thisFOV > myFOV: myFOV = thisFOV
+    satDict['FOV'] = myFOV
     
     # Actually make the mask
     mask = np.zeros(imMap.data.shape)
@@ -796,9 +924,9 @@ def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None):
         outs = np.array([thetax, thetay]).transpose()
     return outs
 
-def releaseTheWombat(obsFiles, nWFs=1):
+def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False):
     
-    global mainwindow, pws, nSats, wfs, nwfs, bmodes
+    global mainwindow, pws, nSats, wfs, nwfs, bmodes, ovw
     
     # obsFiles should have 1 array for each satellite
     nSats = len(obsFiles)
@@ -829,7 +957,20 @@ def releaseTheWombat(obsFiles, nWFs=1):
             
         sclIms.append(satScls)
         satStuff.append(someStuff)
-        
+    
+    # Get the max FoV from the satStuff so we can adjust height slider appropriately
+    maxFoV = 0
+    for stuff in satStuff:
+        if stuff[0]['FOV'] > maxFoV: maxFoV = stuff[0]['FOV']
+    # pad it a bit then round to a nice number
+    maxFoV = int((1.1 * maxFoV) / 5) * 5
+    # Edit the dictionaries in wombatWF
+    wf.rngDict['Height (Rs)'] = [1,maxFoV]
+    if maxFoV > 20:
+        wf.defDict['Height (Rs)'] = 25
+    elif maxFoV < 5:
+        wf.defDict['Height (Rs)'] = 1.5
+            
     
     # Start the application
     app = QApplication(sys.argv)
@@ -841,10 +982,18 @@ def releaseTheWombat(obsFiles, nWFs=1):
         pw.show()
         pws.append(pw) 
     
+    # Launch the overview panel (if turned on)
+    if overviewPlot:
+        ovw = OverviewWindow(satStuff)
+        ovw.show()
+    else:
+        ovw = None
+
     
     # Launch the parameter panel    
     mainwindow = ParamWindow(nWFs)
     mainwindow.show()
+    
 
     sys.exit(app.exec_())
     

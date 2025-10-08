@@ -28,16 +28,13 @@ gridDict = {'GCS':[5,15,30], 'Torus':[30,25], 'Sphere':[50,25], 'Half Sphere':[2
 # The default ranges for each of the parameter options
 # These will be more COR appropriate than HI appropriate but will
 # switch if the code see HI observations
-rngDict = {'Height (Rs)':[1,25], 'Lon (deg)':[-180,180], 'Lat (deg)':[-90,90], 'Tilt (deg)':[-90,90], 'AW (deg)':[0,90], 'kappa':[0,1], 'AW_FO (deg)':[0,90], 'AW_EO (deg)':[0,90], 'deltaAx':[0,2], 'deltaCS':[0,2], 'ecc1':[0,1], 'ecc2':[0,1], 'Roll (deg)':[-90,90], 'Yaw (deg)':[-90,90], 'Pitch (deg)':[-90,90], 'Lx (Rs)':[0,25], 'Ly (Rs)':[0,25], 'Lz (Rs)':[0,25]}
+rngDict = {'Height (Rs)':[1,50], 'Lon (deg)':[-180,180], 'Lat (deg)':[-90,90], 'Tilt (deg)':[-90,90], 'AW (deg)':[0,90], 'kappa':[0,1], 'AW_FO (deg)':[0,90], 'AW_EO (deg)':[0,90], 'deltaAx':[0,2], 'deltaCS':[0,2], 'ecc1':[0,1], 'ecc2':[0,1], 'Roll (deg)':[-90,90], 'Yaw (deg)':[-90,90], 'Pitch (deg)':[-90,90], 'Lx (Rs)':[0,25], 'Ly (Rs)':[0,25], 'Lz (Rs)':[0,25]}
 
 # The HI values (only includes ones that change)
 rngDictHI = {'Height (Rs)':[1,215], 'Lx (Rs)':[0,215], 'Ly (Rs)':[0,215], 'Lz (Rs)':[0,215]}
 
 # The default values for each parameter (again COR appropriate)
 defDict = {'Height (Rs)':10, 'Lon (deg)':0, 'Lat (deg)':0, 'Tilt (deg)':0, 'AW (deg)':30, 'AW_FO (deg)':40, 'AW_EO (deg)':15, 'kappa':0.3, 'deltaAx':1, 'deltaCS':1, 'ecc1':0.8, 'ecc2':0.7, 'Roll (deg)':0, 'Yaw (deg)':0, 'Pitch (deg)':0, 'Lx (Rs)':10, 'Ly (Rs)':4, 'Lz (Rs)':10}
-
-# The HI values
-defDictHI = {'Height (Rs)':50, 'Lx (Rs)':50, 'Ly (Rs)':10, 'Lz (Rs)':50}
 
 
 
@@ -109,8 +106,9 @@ def SPH2CART(sph_in):
 
 class wireframe():
     "Container to hold all the parameters and the points for a wireframe object"
-    def __init__(self, WFtype):
+    def __init__(self, WFtype, WFidx=-1):
         self.WFtype   = WFtype
+        self.showMe   = False
         if type(WFtype) != type(None):
             if WFtype not in npDict:
                 sys.exit('Unrecognized wireframe type. Exiting now... bye')
@@ -121,6 +119,9 @@ class wireframe():
             self.params   = np.empty(self.nParams)
             self.gPoints  = None # set up the number of points in the grid
             self.points   = None # the WF grid points in theoryland coords
+            self.showMe   = True
+            self.WFidx  = WFidx
+            
         
         if WFtype != None:
             # Set up labels
