@@ -321,6 +321,7 @@ class ParamWindow(QMainWindow):
             thisLay = self.cleanLayout(self.WFLays[idx])
             for aPW in pws:
                 aPW.scatters[idx].setData([])
+            ovw.arrows[idx].setStyle(angle=0, headWidth=0, headLen=0, tailLen=0, tailWidth=0, pxMode=False,  pen={'color': color, 'width': 0}, brush=color)    
         else:
             # Create a new wf object but pass it any matching
             # parameters from the previous version
@@ -370,6 +371,7 @@ class ParamWindow(QMainWindow):
 
     def SBclicked(self):
         print('Save not coded yet')
+        
 
     def MBclicked(self):
         print('Mass not coded yet')
@@ -564,7 +566,7 @@ class FigWindow(QWidget):
                     pt = [lat, lon, r*7e8]
                     myPt = pts2proj(pt, obs, obsScl, mywcs, center=cent, occultR=occultR)
                     if len(myPt) > 0:          
-                        pos.append({'pos': [myPt[0][0], myPt[0][1]], 'pen':{'color':myColor, 'width':1}, 'pen':{'color':myColor}})
+                        pos.append({'pos': [myPt[0][0], myPt[0][1]], 'pen':{'color':myColor, 'width':1}, 'brush': pg.mkBrush(myColor)})
                         
                 self.scatters[i].setData(pos)
                 
@@ -650,7 +652,6 @@ class OverviewWindow(QWidget):
         xh = aL * np.sin(rlon)
         yh = -aL * np.cos(rlon)
         ang = -np.arctan2(yh, xh) * 180 / np.pi
-        
         self.arrows[i].setStyle(angle=lon-270, headWidth=0.05, headLen=hL, tailLen=tL, tailWidth=0.03, pxMode=False,  pen={'color': color, 'width': 2}, brush=color)
         tail_len = self.arrows[i].opts['tailLen']
         self.arrows[i].setPos(xh, yh)
