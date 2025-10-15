@@ -5,7 +5,7 @@
 # Dictionary for the colors of the wireframe objects by type
 # Defaults are an attempt to be color blind friends on black/white backgrounds
 # GCS: standard green, Torus: teal, Spheres/Ellipses: blue, slab: orange
-colorDict = {'GCS':'#9AE630', 'Torus': '#38D5BE', 'Sphere':'#2B7FFF', 'Half Sphere':'#2B7FFF', 'Ellipsoid':'#2B7FFF', 'Half Ellipsoid':'#2B7FFF', 'Slab':'#FF8904'}
+colorDict = {'GCS':'#9AE630', 'Torus': '#38D5BE', 'Sphere':'#2B7FFF', 'Half Sphere':'#2B7FFF', 'Ellipse':'#2B7FFF', 'Half Ellipse':'#2B7FFF', 'Slab':'#FF8904'}
 
 # Extra colors to use if plotting more than one of the same type of WF
 # order is maroon, purple, yellow
@@ -16,7 +16,7 @@ bonusColors = ['#FF2056', '#9810FA', '#FFD230']
 # Attempting to keep theta to lon angle and phi to lat angle throughout WOMBAT
 # Everything is defined wrt to CK's Theoryland (which is Cartesian with 'nose' along x-axis
 # and largest non-radial width in the z/vertical direction for antisymmetric shapes)
-gridDict = {'GCS':[5,15,30], 'Torus':[30,25], 'Sphere':[50,25], 'Half Sphere':[25,25], 'Ellipsoid':[50,25], 'Half Ellipsoid':[25,25], 'Slab':[10,5,10]}
+gridDict = {'GCS':[5,15,30], 'Torus':[30,25], 'Sphere':[50,25], 'Half Sphere':[25,25], 'Ellipse':[50,25], 'Half Ellipse':[25,25], 'Slab':[10,5,10]}
 
 
 
@@ -51,7 +51,7 @@ import sys
 from pyGCS import getGCS
 
 # Dictionary for the number of points per WF type
-npDict = {'GCS': 6, 'Torus': 8, 'Sphere':4, 'Half Sphere':4, 'Ellipsoid':7, 'Half Ellipsoid':7, 'Slab':9}
+npDict = {'GCS': 6, 'Torus': 8, 'Sphere':4, 'Half Sphere':4, 'Ellipse':7, 'Half Ellipse':7, 'Slab':9}
 
 # Useful globals
 global dtor, radeg, pi
@@ -101,7 +101,7 @@ def SPH2CART(sph_in):
 # GCS parameters - height, lon, lat, tilt, AW, kappa,  (6)
 # Half torus - height, lon, lat,  tilt, AW, deltaAx, deltaCS (7) [add rot about nose?]
 # Sphere/Half sphere - height, lon, lat,  AW (4)
-# Ellipsoid/Half ellipsoid - height, lon, lat,  tilt, AW, epp (6)
+# Ellipse/Half ellipsoid - height, lon, lat,  tilt, AW, epp (6)
 # Slab - height, lon, lat, roll (~tilt), yaw (~lon), pitch (~lat),  Lx, Ly, Lz,  (9)
 
 class wireframe():
@@ -111,6 +111,7 @@ class wireframe():
         self.showMe   = False
         if type(WFtype) != type(None):
             if WFtype not in npDict:
+                print (WFtype)
                 sys.exit('Unrecognized wireframe type. Exiting now... bye')
             self.nParams  = npDict[WFtype]
             self.WFcolor  = colorDict[WFtype]
@@ -146,7 +147,7 @@ class wireframe():
             self.labels = np.array(['Height (Rs)', 'Lon (deg)', 'Lat (deg)', 'Tilt (deg)', 'AW_FO (deg)', 'AW_EO (deg)', 'deltaAx', 'deltaCS'])
         elif WFtype in ['Sphere', 'Half Sphere']:
             self.labels = np.array(['Height (Rs)', 'Lon (deg)', 'Lat (deg)', 'AW (deg)'])
-        elif WFtype in ['Ellipsoid', 'Half Ellipsoid']:
+        elif WFtype in ['Ellipse', 'Half Ellipse']:
             self.labels = np.array(['Height (Rs)', 'Lon (deg)', 'Lat (deg)', 'Tilt (deg)', 'AW (deg)', 'ecc1', 'ecc2'])
         elif WFtype == 'Slab':
             self.labels = np.array(['Height (Rs)', 'Lon (deg)', 'Lat (deg)', 'Roll (deg)', 'Yaw (deg)', 'Pitch (deg)', 'Lx (Rs)', 'Ly (Rs)', 'Lz (Rs)'])
@@ -318,10 +319,10 @@ class wireframe():
             self.points = np.transpose(rotz(roty(sphere, -ps[2]), ps[1]))  
             
         # |---------------------------|
-        # |------ Ellipsoid F/H ------|
+        # |------ Ellipse F/H ------|
         # |---------------------------|
-        elif WFtype in ['Ellipsoid', 'Half Ellipsoid']: 
-            if WFtype == 'Ellipsoid':
+        elif WFtype in ['Ellipse', 'Half Ellipse']: 
+            if WFtype == 'Ellipse':
                 thetas = np.linspace(-pi, pi, gps[0], endpoint=True)
             else:
                 thetas = np.linspace(-pi/2, pi/2, gps[0], endpoint=True)

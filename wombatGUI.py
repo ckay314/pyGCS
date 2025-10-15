@@ -1,4 +1,4 @@
-import sys
+import sys, os
 import numpy as np
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QGridLayout, QTabWidget, QSlider, QComboBox, QLineEdit, QPushButton
 from PyQt5 import QtCore
@@ -8,6 +8,8 @@ import wombatWF as wf
 import pyqtgraph as pg
 
 from astropy.coordinates import SkyCoord
+from astropy.io import fits
+
 
 
 from wcs_funs import fitshead2wcs, wcs_get_pixel, wcs_get_coord
@@ -27,10 +29,11 @@ slogger.setLevel(logging.ERROR)
 #global mainwindow, pws, nSats, wfs, nwfs, bmodes
 
 
-global occultDict
+global occultDict, WFname2id
 # Nominal radii (in Rs) for the occulters for each instrument. Pulled from google so 
 # generally correct (hopefully) but not the most precise
 occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.1,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215]} 
+WFname2id = {'GCS':1, 'Torus':2, 'Sphere':3, 'Half Sphere':4, 'Ellipse':5, 'Half Ellipse':6, 'Slab':7}
 
 class ParamWindow(QMainWindow):
     def __init__(self, nTabs):
@@ -52,8 +55,8 @@ class ParamWindow(QMainWindow):
         
         # Create holder for the WF types
         self.WFtypes = np.zeros(nTabs)
-        self.WFnum2type = ['None', 'GCS', 'Torus', 'Sphere', 'Half Sphere', 'Ellipsoid', 'Half Ellipsoid', 'Slab']
-        self.WFshort = {'GCS':'GCS', 'Torus':'Tor', 'Sphere':'Sph', 'Half Sphere':'HSph', 'Ellipsoid':'Ell', 'Half Ellipsoid':'HEll', 'Slab':'Slab'}
+        self.WFnum2type = ['None', 'GCS', 'Torus', 'Sphere', 'Half Sphere', 'Ellipse', 'Half Ellipse', 'Slab']
+        self.WFshort = {'GCS':'GCS', 'Torus':'Tor', 'Sphere':'Sph', 'Half Sphere':'HSph', 'Ellipse':'Ell', 'Half Ellipse':'HEll', 'Slab':'Slab'}
         
         # Create holder for the WF and the params
         #self.WFs = theWFs #np.array([None for i in range(nTabs)])
@@ -61,7 +64,9 @@ class ParamWindow(QMainWindow):
         
         # holders for the param widgets so we can rm them
         self.WFLays = []
+        self.widges = [None for i in range(nTabs)]
         self.layouts = []
+        self.cbs = []
 
         for i in range(nTabs):
             aTab = QWidget()
@@ -97,6 +102,7 @@ class ParamWindow(QMainWindow):
         
         # Drop down box
         cbox = self.wfComboBox(i)
+        self.cbs.append(cbox)
         layout.addWidget(cbox,3,0,1,11,alignment=QtCore.Qt.AlignCenter)
         
         label = QLabel('Parameters')
@@ -313,6 +319,7 @@ class ParamWindow(QMainWindow):
                         
             self.layouts[idx].addLayout(WFLay, 7,0,30,11)
             self.WFLays[idx] = WFLay
+            self.widges[idx] = widges
             
         elif a == 0:
             # Set back to none if didn't select a WF
@@ -344,6 +351,7 @@ class ParamWindow(QMainWindow):
             WFLay, widges = self.WFparamLayout(newWF)
             self.layouts[idx].addLayout(WFLay, 7,0,30,11)
             self.WFLays[idx] = WFLay
+            self.widges[idx] = widges
            
             # Give the structure the new wf
             wfs[idx] = newWF
@@ -369,8 +377,84 @@ class ParamWindow(QMainWindow):
             for aPW in pws:
                 aPW.plotWFs(justN=i)
 
-    def SBclicked(self):
-        print('Save not coded yet')
+    def SBclicked(self, singleSat=None):
+        # Single sat is integer corresponding to a plot window/satellite number
+        fileName = 'wombatSummaryFile.txt'
+        # Get the filename 
+        
+        outFile = open('wboutputs/'+fileName, 'w')
+        print ('Saving results in wboutputs/'+fileName)
+        # Save the wireframe points
+        for j in range(nwfs):
+            aWF = wfs[j]
+            if aWF.WFtype:
+                outFile.write('WFtype'+str(j+1)+': ' + str(aWF.WFtype)+'\n')
+                for i in range(len(aWF.labels)):
+                    thisLab = aWF.labels[i]
+                    spIdx = thisLab.find(' ')
+                    if spIdx > 0:
+                        outStr = thisLab[:spIdx]+str(j+1)+': ' + str(aWF.params[i])
+                    else:
+                        outStr = thisLab+str(j+1)+': ' + str(aWF.params[i])
+                    outFile.write(outStr+'\n')
+                    
+        # Save the background plot info
+        if type(singleSat) != type(None):
+            toDo = [singleSat]
+        else:
+            toDo = range(nSats)
+        for j in toDo:
+            aPW = pws[j]
+            tidx = aPW.tidx
+            outStr = 'ObsTime'+str(j+1)+': ' + aPW.satStuff[tidx]['DATEOBS']
+            outFile.write(outStr+'\n')
+            if 'DATEOBS0' in aPW.satStuff[tidx]:
+                outStr = 'ObsTimeZero'+str(j+1)+': ' + aPW.satStuff[tidx]['DATEOBS0']
+                outFile.write(outStr+'\n')
+            
+            outStr = 'ObsType'+str(j+1)+': ' + aPW.satStuff[tidx]['MYTAG']
+            outFile.write(outStr+'\n')
+            
+            outStr = 'Scaling'+str(j+1)+': ' +str(aPW.sclidx)
+            outFile.write(outStr+'\n')
+            outStr = 'MinVal'+str(j+1)+': ' +str(aPW.MinSlider.value())
+            outFile.write(outStr+'\n')
+            outStr = 'MaxVal'+str(j+1)+': ' +str(aPW.MaxSlider.value())
+            outFile.write(outStr+'\n')
+        
+        outFile.close()
+
+        # Save figures            
+        for j in toDo:
+            aPW = pws[j]
+            tidx = aPW.tidx
+            figName = 'wombat_'+ aPW.satStuff[tidx]['DATEOBS'] + '_' +  aPW.satStuff[tidx]['MYTAG'] +'.png'
+            figGrab = aPW.pWindow.grab()
+            figGrab.save('wboutputs/'+figName)
+            print ('Saving figure in wboutputs/'+figName )
+        if ovw:
+            figName = 'wombat_'+ pws[0].satStuff[0]['DATEOBS'] + '_overview.png'
+            figGrab = ovw.pWindow.grab()
+            figGrab.save('wboutputs/'+figName)
+            print ('Saving figure in wboutputs/'+figName )
+            
+        
+        # Save Files
+        for j in toDo:
+            aPW = pws[j]
+            tidx = aPW.tidx
+            fitsName = 'wombat_'+ aPW.satStuff[tidx]['DATEOBS'] + '_' +  aPW.satStuff[tidx]['MYTAG'] +'.fits'
+            if not os.path.exists('wbfits/'+fitsName):
+                fitsdata = aPW.OGims[tidx].data               
+                fitshdr  = aPW.hdrs[tidx]
+                
+                # Don't know why this gets tripped for some LASCO cases but making
+                # it a string makes it happy
+                if 'OBT_TIME' in fitshdr:
+                    fitshdr['OBT_TIME'] = str(fitshdr['OBT_TIME'])
+                print ('Saving fits file as wbfits/'+fitsName)
+                hdu = fits.PrimaryHDU(fitsdata, header=fitshdr)
+                hdu.writeto('wbfits/'+fitsName, overwrite=True)
         
 
     def MBclicked(self):
@@ -404,12 +488,14 @@ class ParamWindow(QMainWindow):
     
         
 class FigWindow(QWidget):
-    def __init__(self, satName, myObs, myScls, satStuff, myNum=0):
+    def __init__(self, satName, myObs, myScls, satStuff, myNum=0, labelPW=True):
         super().__init__()
         # Obs are [[ims], [hdrs]] as passed to the GUI (prob MSB)
         # Scls are [[lin, log, sqrt]] on -100,100 range
         
         self.setGeometry(550*(myNum+1), 350, 350, 450)
+        self.winidx = myNum
+        self.labelIt = labelPW
         
         self.satStuff = satStuff
         self.satName = satStuff[0]['OBS'] +' '+ satStuff[0]['INST']
@@ -525,7 +611,8 @@ class FigWindow(QWidget):
         sys.exit()
 
     def SBclicked(self):
-        print('Save not coded yet')
+        mainwindow.SBclicked(singleSat=self.winidx)
+        
 
     def MBclicked(self):
         print('Mass not coded yet')
@@ -582,6 +669,16 @@ class FigWindow(QWidget):
             self.pWindow.plot(self.satStuff[self.tidx]['SUNCIRC'][0], self.satStuff[self.tidx]['SUNCIRC'][1])
         if 'SUNNORTH' in self.satStuff[self.tidx]:
             self.pWindow.plot(self.satStuff[self.tidx]['SUNNORTH'][0], self.satStuff[self.tidx]['SUNNORTH'][1], symbolSize=3, symbolBrush='w', pen=pg.mkPen(color='w', width=1))
+        if self.labelIt:
+            geom = self.pWindow.visibleRange()
+            wid = geom.width()
+            text_item1 = pg.TextItem(self.satStuff[self.tidx]['MYTAG'], anchor=(0, 1), fill='k')
+            text_item1.setPos(0.001*wid, 0.001*wid)
+            self.pWindow.addItem(text_item1)
+            text_item2 = pg.TextItem(self.satStuff[self.tidx]['DATEOBS'], anchor=(1, 1), fill='k')
+            text_item2.setPos(0.999*wid, 0.001*wid)
+            self.pWindow.addItem(text_item2)
+            
 
 
 
@@ -618,6 +715,7 @@ class OverviewWindow(QWidget):
         
         # Set up scatters for the sat points so can adjust without clearing
         self.scatters = []
+        self.satLabs = []
         for i in range(nSats):
             # would be good to update this to adjust with time
             myPos = satStuff[i][0]['POS']
@@ -633,6 +731,15 @@ class OverviewWindow(QWidget):
             pos.append({'pos': [x,y]})
             self.scatters[i].setData(pos)
             self.pWindow.addItem(aScat)
+            
+            myName = satStuff[i][0]['SHORTNAME']
+            text_item = pg.TextItem(myName, anchor=(0.5, 0.5))
+            ysat = - 0.85*myR * np.cos(myLon)
+            xsat = 0.85*myR * np.sin(myLon)
+            text_item.setPos(xsat, ysat)
+            
+            self.satLabs.append(text_item)
+            self.pWindow.addItem(text_item)
         
         # Set up arrow for the WF lons
         self.arrows = []
@@ -665,7 +772,6 @@ class OverviewWindow(QWidget):
 def makeNiceMMs(imIn, hdr):
     # Clean out any nans
     im = imIn.data
-    
     imNonNaN = im[~np.isnan(im)]
     medval  = np.median(np.abs(imNonNaN))
     
@@ -719,15 +825,16 @@ def makeNiceMMs(imIn, hdr):
     sclIms = [linIm, logIm,  sqrtIm]
     return sclIms
     
-def getSatStuff(imMap):
+def getSatStuff(imMap, diffDate=None):
     # Set up satDict as a micro header that we will package the mask in
-    # Keys are OBS, INST, POS, SCALE, CRPIX, WCS, SUNPIX, ONERSUN, MASK
-    # OCCRPIX, OCCRARC, SUNCIRC, SUNNORTH, OBSTYPE, FOV
+    # Keys are OBS, INST, MYTAG, POS, SCALE, CRPIX, WCS, SUNPIX, ONERSUN, MASK
+    # OCCRPIX, OCCRARC, SUNCIRC, SUNNORTH, OBSTYPE, FOV, DATEOBS, DATEOBS0
     satDict = {}
     
     # Get the name 
     myhdr   = imMap.meta
     satDict['OBS'] =  myhdr['obsrvtry']
+    
     
     # PSP format
     if myhdr['obsrvtry'] == 'Parker Solar Probe':
@@ -748,6 +855,7 @@ def getSatStuff(imMap):
         satDict['OBS'] =  myhdr['telescop']
         satDict['INST'] = myhdr['instrume'] + '_' + myhdr['detector']
         myTag   = myhdr['telescop'] + '_' + myhdr['instrume'] + '_' + myhdr['detector']
+    satDict['MYTAG'] = myTag
         
     # Obs type - flag between HI, COR, EUV
     if satDict['OBS'] in ['Parker Solar Probe', 'Solar Orbiter']:
@@ -764,7 +872,28 @@ def getSatStuff(imMap):
             satDict['OBSTYPE'] = 'COR'
         else:
             satDict['OBSTYPE'] = 'EUV'
-        
+            
+    shortNames = {'Parker Solar Probe':'PSP', 'Solar Orbiter':'SolO', 'STEREO_A':'STA', 'STEREO_B':'STB', 'SOHO':'SOHO'}
+    satDict['SHORTNAME'] = shortNames[satDict['OBS']]
+    
+    
+    # Get obs date/time
+    if len(myhdr['date-obs']) > 13:
+        satDict['DATEOBS'] = myhdr['date-obs']
+    else:
+        satDict['DATEOBS'] = myhdr['date-obs'] + 'T' + myhdr['time-obs']
+    satDict['DATEOBS'] = satDict['DATEOBS'].replace('/','-')
+    if '.' in satDict['DATEOBS']:
+        dotidx = satDict['DATEOBS'].find('.')
+        satDict['DATEOBS'] = satDict['DATEOBS'][:dotidx]
+
+    if diffDate:
+        satDict['DATEOBS0'] = diffDate
+        satDict['DATEOBS0'] = satDict['DATEOBS0'].replace('/','-')
+        if '.' in satDict['DATEOBS0']:
+            dotidx = satDict['DATEOBS0'].find('.')
+            satDict['DATEOBS0'] = satDict['DATEOBS0'][:dotidx]
+     
 
     # Get satellite info    
     obsLon = imMap.observer_coordinate.lon.degree
@@ -925,15 +1054,39 @@ def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None):
         outs = np.array([thetax, thetay]).transpose()
     return outs
 
-def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False):
+
+def reloadIt(rD):
+    # Set the wf params
+    for i in range(nwfs):
+        ii = str(i+1)
+        if 'WFtype'+ii in rD:
+            WFid = WFname2id[rD['WFtype'+ii]]
+            wfs[i]  = wf.wireframe(rD['WFtype'+ii])
+            mainwindow.cbs[i].setCurrentIndex(WFid)
+            # get the expected labels
+            for j in range(len(wfs[i].labels)):
+                thisLab = wfs[i].labels[j]
+                spIdx = thisLab.find(' ')
+                shortStr = thisLab[:spIdx]+ii
+                if shortStr in rD:
+                    wfs[i].params[j] = float(rD[shortStr])
+                    mainwindow.widges[i][0][j].setText(str(wfs[i].params[j]))
+            mainwindow.updateWFpoints(wfs[i], mainwindow.widges[i])
+
+    # Set the fig params
+    
+def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadDict=None):
     
     global mainwindow, pws, nSats, wfs, nwfs, bmodes, ovw
     
     # obsFiles should have 1 array for each satellite
     nSats = len(obsFiles)
     # each sat array then [[ims], [hdrs]]
-    nwfs = nWFs
-    wfs = [wf.wireframe(None) for i in range(nWFs)]
+    if type(reloadDict) != type(None):
+        nwfs = reloadDict['nWFs']
+    else:
+        nwfs = nWFs
+    wfs = [wf.wireframe(None) for i in range(nwfs)]
     
     # Find the min/max for each type of plot range
     sclIms = []    
@@ -943,7 +1096,7 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False):
         someStuff = []
         for j in range(len(obsFiles[i][0])):
             sclIm = makeNiceMMs(obsFiles[i][0][j], obsFiles[i][1][j])
-            mySatStuff = getSatStuff(obsFiles[i][0][j])
+            mySatStuff = getSatStuff(obsFiles[i][0][j], diffDate=obsFiles[i][1][j]['DATE-OBS0'])
             # Check if it made a mask and just use it now if so
             if 'MASK' in mySatStuff:
                 midx = np.where(mySatStuff['MASK'] == 1)
@@ -979,7 +1132,7 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False):
     # Launch obs windows
     pws = []
     for i in range(nSats):
-        pw = FigWindow('Sat1', obsFiles[i], sclIms[i], satStuff[i], myNum=i)
+        pw = FigWindow('Sat1', obsFiles[i], sclIms[i], satStuff[i], myNum=i, labelPW=labelPW)
         pw.show()
         pws.append(pw) 
     
@@ -989,12 +1142,15 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False):
         ovw.show()
     else:
         ovw = None
-
+    
     
     # Launch the parameter panel    
-    mainwindow = ParamWindow(nWFs)
+    mainwindow = ParamWindow(nwfs)
     mainwindow.show()
     
+    # Set to values from reload file if passed
+    if type(reloadDict) != type(None):
+        reloadIt(reloadDict)
 
     sys.exit(app.exec_())
     
