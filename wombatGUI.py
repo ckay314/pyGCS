@@ -67,6 +67,9 @@ class ParamWindow(QMainWindow):
         self.widges = [None for i in range(nTabs)]
         self.layouts = []
         self.cbs = []
+        
+        # Number of points in the sliders
+        self.nSliders = 201
 
         for i in range(nTabs):
             aTab = QWidget()
@@ -170,7 +173,7 @@ class ParamWindow(QMainWindow):
         WFLay = QGridLayout()
         widges = [[], []]
         i2f = []
-        nSliders = 201
+        nSliders = self.nSliders
         for i in range(9):
             if i < len(myWF.labels):
                 # Get the conversion factor between the slider integers and float vals
@@ -211,7 +214,7 @@ class ParamWindow(QMainWindow):
                 slider.setMinimum(0)
                 slider.setMaximum(0)
                 WFLay.addWidget(slider, 3*i+1,1,1,9)  
-        
+         
         # Need to do this explicit for each one for some reason other wise gets
         # upset about the looped index variable
         # Params 1-4 always happen
@@ -1071,9 +1074,23 @@ def reloadIt(rD):
                 if shortStr in rD:
                     wfs[i].params[j] = float(rD[shortStr])
                     mainwindow.widges[i][0][j].setText(str(wfs[i].params[j]))
+                myRng = wfs[i].ranges[j]
+                dx = (myRng[1] - myRng[0]) / (mainwindow.nSliders - 1)
+                x0 = myRng[0]
+                slidx = int((float(wfs[i].params[j]) - x0)/dx)
+                mainwindow.widges[i][1][j].setValue(slidx)
+                #mainwindow.b2s(mainwindow.widges[i][1][0], mainwindow.widges[i][0][0], mainwindow.i2fs[i][0], wfs[i].ranges[0][0],mainwindow.nSliders, wfs[i], mainwindow.widges[i])
             mainwindow.updateWFpoints(wfs[i], mainwindow.widges[i])
 
     # Set the fig params
+    for i in range(nSats):
+        ii = str(i+1)
+        myscl = int(rD['Scaling'+ii])
+        myMin = int(rD['MinVal'+ii])
+        myMax = int(rD['MaxVal'+ii])
+        pws[i].cbox.setCurrentIndex(myscl)
+        pws[i].MinSlider.setValue(myMin)
+        pws[i].MaxSlider.setValue(myMax)
     
 def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadDict=None):
     
