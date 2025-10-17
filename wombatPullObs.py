@@ -31,7 +31,8 @@ CORtime     = 20 # resolution to download in minutes
 doSoloHI = False
 
 # WISPR setup
-doWISPR = False
+doWISPR = True
+whichWISPR = ['In', 'Out'] # options of 'In' and 'Out
 
 
 # |---------------------------------|
@@ -82,11 +83,11 @@ if doLASCO:
     if 'C2' in whichLASCO:
         if len(whichC[0]):
             for i in range(len(whichC[0])):
-                downloaded_files = Fido.fetch(result[0,whichC[0][i]], path=obsFiles + 'LASCO/' + ymdts[0][i] + '_{file}') 
+                downloaded_files = Fido.fetch(result[0,whichC[0][i]], path=obsFiles + 'LASCO/' + ymdts[0][i] + '_C2_{file}') 
     if 'C3' in whichLASCO:
         if len(whichC[1]):
             for i in range(len(whichC[1])):
-                downloaded_files = Fido.fetch(result[0,whichC[1][i]], path=obsFiles + 'LASCO/' + ymdts[1][i] + '_{file}') 
+                downloaded_files = Fido.fetch(result[0,whichC[1][i]], path=obsFiles + 'LASCO/' + ymdts[1][i] + '_C3_{file}') 
 
 
 
@@ -154,26 +155,27 @@ if doSECCHI:
    
     # Do the DLs        
     if 'EUVI' in whichSECCHI:
-        for idxs in wavidx:
+        for i in range(len(wavidx)):
+            idxs = wavidx[i]
             #print (result[0,idxs])
             if len(idxs) > 0:
-                downloaded_files = Fido.fetch(result[0,idxs], path=obsFiles+'SECCHI/{file}')          
+                downloaded_files = Fido.fetch(result[0,idxs], path=obsFiles + 'SECCHI/EUVI_' + str(EUVIwav[i]) + 'a_{file}')          
     if 'COR1' in whichSECCHI:
         #print(result[0,whichC[0]])
         if len(whichC[0]) > 0:
-            downloaded_files = Fido.fetch(result[0,whichC[0]], path=obsFiles+'SECCHI/{file}') 
+            downloaded_files = Fido.fetch(result[0,whichC[0]], path=obsFiles+'SECCHI/COR1_{file}') 
     if 'COR2' in whichSECCHI:
         #print(result[0,whichC[1]])
         if len(whichC[0]) > 0:
-            downloaded_files = Fido.fetch(result[0,whichC[1]], path=obsFiles+'SECCHI/{file}') 
+            downloaded_files = Fido.fetch(result[0,whichC[1]], path=obsFiles+'SECCHI/COR2_{file}') 
     if 'HI1' in whichSECCHI:
         #print(result[0,whichC[2]])
         if len(whichC[0]) > 0:
-            downloaded_files = Fido.fetch(result[0,whichC[2]], path=obsFiles+'SECCHI/{file}') 
+            downloaded_files = Fido.fetch(result[0,whichC[2]], path=obsFiles+'SECCHI/HI1_{file}') 
     if 'HI2' in whichSECCHI:
         #print(result[0,whichC[3]])
         if len(whichC[0]) > 0:
-            downloaded_files = Fido.fetch(result[0,whichC[3]], path=obsFiles+'SECCHI/{file}') 
+            downloaded_files = Fido.fetch(result[0,whichC[3]], path=obsFiles+'SECCHI/HI2_{file}') 
                 
 # |----------------------------|
 # |--- Pull the SoloHI data ---|
@@ -226,6 +228,10 @@ if doWISPR:
         fname = ogname[ogname.rfind('/')+1:]
         ymd = fname[13:21]
         myPath = basePath + ymd + '/' + fname
-        print (myPath)
-        temp = wget.download(myPath, out=obsFiles+'WISPR/')
+        if ('V1_1' in fname) & ('In' in whichWISPR):
+            print (fname)
+            #temp = wget.download(myPath, out=obsFiles+'WISPR/')
+        elif ('V1_2' in fname) & ('Out' in whichWISPR):
+            print (fname)
+            #temp = wget.download(myPath, out=obsFiles+'WISPR/')
             
