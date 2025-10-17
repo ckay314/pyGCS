@@ -53,7 +53,7 @@ doSoloHI = False
 whichSoloHI = ['Quad'] # options of 'Quad' or 'Single'
 
 # WISPR setup
-doWISPR = True
+doWISPR = False
 whichWISPR = ['In', 'Out'] # options of 'In' and 'Out
 
 
