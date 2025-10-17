@@ -2,15 +2,17 @@ from sunpy.net import Fido, attrs as a
 import astropy.units as u
 import numpy as np
 import wget
+from sunpy.time import parse_time
+
 
 obsFiles = '/Users/kaycd1/wombat/obsFiles/'
 
-startT = '2023/3/4T12:00'
-endT   = '2023/3/4T16:00'
+startT = '2023/03/04T12:00'
+endT   = '2023/03/04T16:00'
 
 # AIA setup
 doAIA = False
-AIAwav = [171, 191, 304] # Select from 94, 131, 171*, 193*, 211, 304*, 335, 1600, 1700 (* most common)
+AIAwav = [171] # Select from 94, 131, 171*, 193*, 211, 304*, 335, 1600, 1700 (* most common)
 AIAtime = 20 # resolution to download in minutes 
 
 # LASCO setup
@@ -19,15 +21,30 @@ whichLASCO = ['C2', 'C3'] # Select from 'C2' or 'C3'
 LASCOtime = 20 # resolution to download in minutes 
 
 # SECCHI setup
-doSECCHI = True
+doSECCHI = False
 whichSECCHI = ['EUVI', 'COR1', 'COR2',  'HI1', 'HI2'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
 EUVIwav     = [195, 171] # Select from 171, 195, 284, 304
+EUVItime    = 20 # resolution to download in minutes 
+CORtime     = 20 # resolution to download in minutes 
 
 # SoloHI setup
 doSoloHI = False
 
 # WISPR setup
 doWISPR = False
+
+
+# |---------------------------------|
+# |----- Set up the time range -----|
+# |---------------------------------|
+# Get time range in minutes, which we may use later
+# since the Sample option in Fido is some times problematic
+# make astropy time objects
+startAPT = parse_time(startT)
+endAPT = parse_time(endT)
+timeRange = (endAPT - startAPT).to(u.min).to_value()
+
+
 
 
 # |---------------------------|
@@ -40,7 +57,8 @@ if doAIA:
         result = Fido.search(a.Time(startT, endT), a.Instrument.aia, a.Wavelength(wv*u.angstrom), a.Sample(AIAtime*u.minute))
         # fileids have format 'aia__lev1:1700:1457020818:1457020818'
         # seems like all level 1 so don't need to filter
-        #downloaded_files = Fido.fetch(result[0,:], path=FidoFiles+'AIA/{file}') 
+        if len(result) > 0:
+            downloaded_files = Fido.fetch(result[0,:], path=obsFiles+'AIA/{file}') 
         
 
 # |------------------------------|
@@ -52,15 +70,24 @@ if doLASCO:
     result = Fido.search(a.Time(startT, endT), a.Instrument.lasco, a.Sample(LASCOtime*u.minute))
     # fileids have format /archive/soho/private/data/processed/lasco/level_05/230304/c3/32733517.fts    
     whichC = [[], []]
+    ymdts = [[], []]
+    
     for i in range(len(result[result.keys()[0]]['fileid'])):
         if '/c2/' in result[result.keys()[0]]['fileid'][i]:
             whichC[0].append(i)
+            ymdts[0].append(str(result[0]['Start Time'][i])[0:10].replace('-','')+'T'+str(result[0]['Start Time'][i])[11:16].replace(':',''))
         elif '/c3/' in result[result.keys()[0]]['fileid'][i]:
             whichC[1].append(i)
-    #if 'C2' in whichLASCO:
-    #    downloaded_files = Fido.fetch(result[0,whichC[0]], path=FidoFiles+'LASCO/{file}') 
-    #if 'C3' in whichLASCO:
-    #    downloaded_files = Fido.fetch(result[0,whichC[1]], path=FidoFiles+'LASCO/{file}') 
+            ymdts[1].append(str(result[0]['Start Time'][i])[0:10].replace('-','')+'T'+str(result[0]['Start Time'][i])[11:16].replace(':',''))
+    if 'C2' in whichLASCO:
+        if len(whichC[0]):
+            for i in range(len(whichC[0])):
+                downloaded_files = Fido.fetch(result[0,whichC[0][i]], path=obsFiles + 'LASCO/' + ymdts[0][i] + '_{file}') 
+    if 'C3' in whichLASCO:
+        if len(whichC[1]):
+            for i in range(len(whichC[1])):
+                downloaded_files = Fido.fetch(result[0,whichC[1][i]], path=obsFiles + 'LASCO/' + ymdts[1][i] + '_{file}') 
+
 
 
 # |----------------------------|
@@ -70,14 +97,19 @@ if doLASCO:
 
 if doSECCHI:
     # Secchi doesn't like using Sample, randomly starts yeeting things so no files left
-    # 
     result = Fido.search(a.Time(startT, endT), a.Instrument.secchi)
 
     # Start pulling EUVI if needed
     if 'EUVI' in whichSECCHI:
         wavidx = [[] for i in range(len(EUVIwav))]
         for i in range(len(EUVIwav)):
-            wavidx[i]=np.where(resultEUV[0]['Wavelength'][:,0] == EUVIwav[i]*u.AA)[0]
+            wavidx[i]=np.where(result[0]['Wavelength'][:,0] == EUVIwav[i]*u.AA)[0]
+            # Manually downselect 
+            fullN = len(wavidx[i])
+            expN  = timeRange / EUVItime
+            if fullN > expN:
+                downN = int(fullN / expN)
+                wavidx[i] = wavidx[i][::downN]
     
     result = Fido.search(a.Time(startT, endT), a.Instrument.secchi)
     whichC = [[], [], [], []]    
@@ -90,24 +122,58 @@ if doSECCHI:
             whichC[2].append(i)
         elif '/hi_2/' in result[0]['fileid'][i]:
             whichC[3].append(i)
-     
+    
+    # Need to filter COR1 but keep full pB series
+    whichC[0] = whichC[0][2:]
+    nTimes = len(whichC[0]) / 3
+    if nTimes - int(nTimes) != 0:
+        if (whichC[0][1]-whichC[0][0]) != 1:
+            whichC[0] = whichC[0][1:]
+        elif (whichC[0][2]-whichC[0][1]) != 1:
+            whichC[0] = whichC[0][2:]
+        nTimes = len(whichC[0]) / 3
+    expN  = timeRange / CORtime
+    if nTimes > expN:
+       downN = int(nTimes / expN) * 3
+       partial = whichC[0][::downN]    
+       full = np.zeros(len(partial)*3, dtype=int)
+       for i in range(len(partial)):
+           idx = int(partial[i])
+           full[3*i: 3*(i+1)]= [idx, idx+1, idx+2]
+       whichC[0] = full
+    
+    # Attempt to filter out COR2 pB images based on time
+    # pB are in triplets around 08:00
+    # totB are at 07:30, 23:30, 38:30, 53:30 but 7:30 is low res (at least via Fido)
+    justTot = []
+    for idx in whichC[1]:
+        if str(result[0]['Start Time'][idx])[14:19] in ['23:30', '38:30', '53:30']:
+            justTot.append(idx)
+    whichC[1] = justTot    
+    
+   
     # Do the DLs        
     if 'EUVI' in whichSECCHI:
         for idxs in wavidx:
-            print (resultEUV[0,idxs])
-            #downloaded_files = Fido.fetch(result[0,idxs[:3]], path=FidoFiles+'SECCHI/{file}')          
+            #print (result[0,idxs])
+            if len(idxs) > 0:
+                downloaded_files = Fido.fetch(result[0,idxs], path=obsFiles+'SECCHI/{file}')          
     if 'COR1' in whichSECCHI:
-        print(result[0,whichC[0]])
-        #downloaded_files = Fido.fetch(result[0,whichC[0][:3]], path=FidoFiles+'SECCHI/{file}') 
+        #print(result[0,whichC[0]])
+        if len(whichC[0]) > 0:
+            downloaded_files = Fido.fetch(result[0,whichC[0]], path=obsFiles+'SECCHI/{file}') 
     if 'COR2' in whichSECCHI:
-        print(result[0,whichC[1]])
-        #downloaded_files = Fido.fetch(result[0,whichC[1][:3]], path=FidoFiles+'SECCHI/{file}') 
+        #print(result[0,whichC[1]])
+        if len(whichC[0]) > 0:
+            downloaded_files = Fido.fetch(result[0,whichC[1]], path=obsFiles+'SECCHI/{file}') 
     if 'HI1' in whichSECCHI:
-        print(result[0,whichC[2]])
-        #downloaded_files = Fido.fetch(result[0,whichC[2][:3]], path=FidoFiles+'SECCHI/{file}') 
+        #print(result[0,whichC[2]])
+        if len(whichC[0]) > 0:
+            downloaded_files = Fido.fetch(result[0,whichC[2]], path=obsFiles+'SECCHI/{file}') 
     if 'HI2' in whichSECCHI:
-        print(result[0,whichC[3]])
-        #downloaded_files = Fido.fetch(result[0,whichC[3][:3]], path=FidoFiles+'SECCHI/{file}') 
+        #print(result[0,whichC[3]])
+        if len(whichC[0]) > 0:
+            downloaded_files = Fido.fetch(result[0,whichC[3]], path=obsFiles+'SECCHI/{file}') 
                 
 # |----------------------------|
 # |--- Pull the SoloHI data ---|
@@ -115,8 +181,6 @@ if doSECCHI:
 # |----------------------------|
 if doSoloHI:
     result = Fido.search(a.Time(startT, endT), a.Instrument.solohi)
-    if len(result.keys()) > 1:
-        print ('Warning -- more than one source found, running with first one ', result.keys()[0])
     goodIdx = []
     for i in range(len(result[result.keys()[0]]['fileid'])):
         # fileid form data/so/solohi/L2/2023/03/04/solo_L2_solohi-4fg_20230304T155426_V02.fits
@@ -133,7 +197,8 @@ if doSoloHI:
         fname = ogname[ogname.rfind('/')+1:]
         ymd = fname[19:27]
         myPath = basePath + ymd + '/' + fname
-        temp = wget.download(myPath, out=FidoFiles+'SoloHI')
+        print (myPath)
+        temp = wget.download(myPath, out=obsFiles+'SoloHI/')
  
 
 # |----------------------------|
@@ -161,5 +226,6 @@ if doWISPR:
         fname = ogname[ogname.rfind('/')+1:]
         ymd = fname[13:21]
         myPath = basePath + ymd + '/' + fname
-        temp = wget.download(myPath, out=FidoFiles+'WISPR')
+        print (myPath)
+        temp = wget.download(myPath, out=obsFiles+'WISPR/')
             
