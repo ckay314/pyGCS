@@ -28,8 +28,11 @@ from solohi_prep import solohi_fits2grid
 obsFiles = '/Users/kaycd1/wombat/obsFiles/'
 
 # Start and end time of the period of interest
-startT = '2023/03/02T12:00'
-endT   = '2023/03/04T16:00'
+#startT = '2023/03/02T12:00'
+#endT   = '2023/03/04T16:00'
+
+startT = '2023/12/31T22:00'
+endT   = '2024/01/01T02:00'
 
 # Difference mode - option to save as base or running diff or just keep as is
 diffMode = 'AsIs' # Select from 'AsIs', 'Base', 'Run'
@@ -49,7 +52,7 @@ whichSECCHI = ['EUVI', 'COR1', 'COR2',  'HI1', 'HI2'] # Select from 'EUVI', 'COR
 EUVIwav     = [195, 171] # Select from 171, 195, 284, 304
 
 # SoloHI setup
-doSoloHI = False
+doSoloHI = True
 whichSoloHI = ['Quad'] # options of 'Quad' or 'Single'
 
 # WISPR setup
@@ -64,9 +67,18 @@ whichWISPR = ['In', 'Out'] # options of 'In' and 'Out
 startAPT = parse_time(startT)
 endAPT = parse_time(endT)
 
+
 # Get day of year
 stDOY = int(startAPT.yday.split(':')[1])
-enDOY = int(endAPT.yday.split(':')[1])
+# End easy if same year
+if startAPT.datetime.year == endAPT.datetime.year:
+    enDOY = int(endAPT.yday.split(':')[1])
+# Split year case
+else:
+    nye = parse_time(str(startAPT.datetime.year) + '/12/31')
+    nye_doy = int(nye.yday.split(':')[1]) # get last doy (good for leap years)
+    enDOY = int(endAPT.yday.split(':')[1]) + nye_doy
+    
 
 # Check if same and doing single day 
 if stDOY == enDOY:
@@ -304,9 +316,55 @@ if doSoloHI:
     # Make an array and make sure sorted               
     for i in range(4):
         goodFiles[i] = np.sort(np.array(goodFiles[i]))
+    
+    # Need to match images to quad for this one with diff time cadences..
+    if 'Quad' in whichSoloHI:
+        shTimes = [[], [], [], []]
+        prefixs = ['solo_L2_solohi-1ft_', 'solo_L2_solohi-2ft_', 'solo_L2_solohi-3fg_', 'solo_L2_solohi-4fg_']
+        for i in range(4):
+            for j in range(len(goodFiles[i])):
+                thisT = parse_time(goodFiles[i][j].replace(prefixs[i],'').replace('_V01.fits',''))
+                shTimes[i].append(thisT)
+    # Figure out which has the most obs
+    nEach =[len(shTimes[i]) for i in range(4)]
+    nMost = np.where(nEach == np.max(nEach))[0][0]
+    nQuads = nEach[nMost] # total number of quad images
+    quadFiles = [[] for i in range(4)]
+    # Find the closest time match for each panel
+    # This will duplicate panels as needed if nEach < nQuads
+    for i in range(4):
+        if i == nMost:
+            quadFiles[i] = goodFiles[i]
+        else:
+            quadFiles[i] = np.copy(goodFiles[nMost])
+            for j in range(nQuads):
+                maxDiff = 9999
+                for k in range(nEach[i]):
+                    nowDiff = np.abs(shTimes[i][k] - shTimes[nMost][j])
+                    if nowDiff < maxDiff:
+                        quadFiles[i][j] = goodFiles[i][k]
+                        maxDiff = nowDiff
+            quadFiles[i] = np.array(quadFiles[i])
+    quadFiles = np.transpose(quadFiles)
+    
+    # Add in the full path for each file
+    # Doesn't like just updating quadFiles so make new array
+    fullQuadFiles = [[] for i in range(nQuads)]
+    for j in range(nQuads):
+        fullLine = []
+        for i in range(4):    
+            fullLine.append(obsFiles+'SoloHI/'+ quadFiles[j][i])
+        fullQuadFiles[j] = fullLine
+        
+    # Run the processing
+    ims = []
+    hdrs = []
+    for i in range(nQuads):
+        im, hdr = solohi_fits2grid(fullQuadFiles[i])
+        ims.append(im)
+        hdrs.append(hdr)
 
     # Add in the actual processing, saving, and output to runFile  
-    # Need to match images to quad for this one with diff time cadences..
                         
         
 # |-------------------------------|
