@@ -28,11 +28,11 @@ from solohi_prep import solohi_fits2grid
 obsFiles = '/Users/kaycd1/wombat/obsFiles/'
 
 # Start and end time of the period of interest
-#startT = '2023/03/02T12:00'
-#endT   = '2023/03/04T16:00'
+startT = '2023/03/02T12:00'
+endT   = '2023/03/04T16:00'
 
-startT = '2023/12/31T22:00'
-endT   = '2024/01/01T02:00'
+#startT = '2023/12/31T22:00'
+#endT   = '2024/01/01T02:00'
 
 # Difference mode - option to save as base or running diff or just keep as is
 diffMode = 'AsIs' # Select from 'AsIs', 'Base', 'Run'
@@ -47,12 +47,13 @@ doLASCO = False
 whichLASCO = ['C2', 'C3'] # Select from 'C2' and 'C3'
 
 # SECCHI setup
-doSECCHI = False
-whichSECCHI = ['EUVI', 'COR1', 'COR2',  'HI1', 'HI2'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
+doSECCHI = True
+#whichSECCHI = ['EUVI', 'COR1', 'COR2',  'HI1', 'HI2'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
+whichSECCHI = ['COR1'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
 EUVIwav     = [195, 171] # Select from 171, 195, 284, 304
 
 # SoloHI setup
-doSoloHI = True
+doSoloHI = False
 whichSoloHI = ['Quad'] # options of 'Quad' or 'Single'
 
 # WISPR setup
@@ -246,10 +247,32 @@ if doSECCHI:
     # Add in the actual processing, saving, and output to runFile  
     #if 'EUVI' in whichSECCHI:
     if 'COR1' in whichSECCHI:   
+        # Pull script makes sure we have triplets so should be able to 
+        # just pass sets of 3
         if len(goodFiles['a'][1]) > 0:
-            ims1a, hdrs1a = secchi_prep(goodFiles['a'][1]) 
+            if (len(goodFiles['a'][1]) % 3) == 0:
+                ims1a, hdrs1a = [], []
+                print ('|---- Processing '+ str(int(len(goodFiles['a'][1])/3)) +' triplets for COR1A ----|')
+                for i in range(int(len(goodFiles['a'][1])/3)):
+                    print ('      on triplet ' +str(1+i))
+                    aIm, aHdr = secchi_prep(goodFiles['a'][1][3*i:3*(i+1)], polarizeOn=True, silent=True)
+                    ims1a.append(aIm)
+                    hdrs1a.append(aHdr)
+            else:
+                sys.exit('Passed bad number of pB triplets for COR1A')
+
         if len(goodFiles['b'][1]) > 0:
-            ims1b, hdrs1b = secchi_prep(goodFiles['b'][1])
+            if (len(goodFiles['b'][1]) % 3) == 0:
+                ims1b, hdrs1b = [], []
+                print ('|---- Processing '+ str(int(len(goodFiles['b'][1])/3)) +' triplets for COR1B ----|')
+                for i in range(int(len(goodFiles['b'][1])/3)):
+                    print ('      on triplet ' +str(1+i))
+                    bIm, bHdr = secchi_prep(goodFiles['b'][1][3*i:3*(i+1)], polarizeOn=True, silent=True)
+                    ims1b.append(bIm)
+                    hdrs1b.append(bHdr)
+            else:
+                sys.exit('Passed bad number of pB triplets for COR1B')
+          
     if 'COR2' in whichSECCHI:   
         if len(goodFiles['a'][2]) > 0:
             print ('|--- Processing STEREO COR2A ---|')
@@ -325,44 +348,52 @@ if doSoloHI:
             for j in range(len(goodFiles[i])):
                 thisT = parse_time(goodFiles[i][j].replace(prefixs[i],'').replace('_V01.fits',''))
                 shTimes[i].append(thisT)
-    # Figure out which has the most obs
-    nEach =[len(shTimes[i]) for i in range(4)]
-    nMost = np.where(nEach == np.max(nEach))[0][0]
-    nQuads = nEach[nMost] # total number of quad images
-    quadFiles = [[] for i in range(4)]
-    # Find the closest time match for each panel
-    # This will duplicate panels as needed if nEach < nQuads
-    for i in range(4):
-        if i == nMost:
-            quadFiles[i] = goodFiles[i]
-        else:
-            quadFiles[i] = np.copy(goodFiles[nMost])
-            for j in range(nQuads):
-                maxDiff = 9999
-                for k in range(nEach[i]):
-                    nowDiff = np.abs(shTimes[i][k] - shTimes[nMost][j])
-                    if nowDiff < maxDiff:
-                        quadFiles[i][j] = goodFiles[i][k]
-                        maxDiff = nowDiff
-            quadFiles[i] = np.array(quadFiles[i])
-    quadFiles = np.transpose(quadFiles)
+        # Figure out which has the most obs
+        nEach =[len(shTimes[i]) for i in range(4)]
+        nMost = np.where(nEach == np.max(nEach))[0][0]
+        nQuads = nEach[nMost] # total number of quad images
+        quadFiles = [[] for i in range(4)]
+        # Find the closest time match for each panel
+        # This will duplicate panels as needed if nEach < nQuads
+        for i in range(4):
+            if i == nMost:
+                quadFiles[i] = goodFiles[i]
+            else:
+                quadFiles[i] = np.copy(goodFiles[nMost])
+                for j in range(nQuads):
+                    maxDiff = 9999
+                    for k in range(nEach[i]):
+                        nowDiff = np.abs(shTimes[i][k] - shTimes[nMost][j])
+                        if nowDiff < maxDiff:
+                            quadFiles[i][j] = goodFiles[i][k]
+                            maxDiff = nowDiff
+                quadFiles[i] = np.array(quadFiles[i])
+        quadFiles = np.transpose(quadFiles)
     
-    # Add in the full path for each file
-    # Doesn't like just updating quadFiles so make new array
-    fullQuadFiles = [[] for i in range(nQuads)]
-    for j in range(nQuads):
-        fullLine = []
-        for i in range(4):    
-            fullLine.append(obsFiles+'SoloHI/'+ quadFiles[j][i])
-        fullQuadFiles[j] = fullLine
+        # Add in the full path for each file
+        # Doesn't like just updating quadFiles so make new array
+        fullQuadFiles = [[] for i in range(nQuads)]
+        for j in range(nQuads):
+            fullLine = []
+            for i in range(4):    
+                fullLine.append(obsFiles+'SoloHI/'+ quadFiles[j][i])
+            fullQuadFiles[j] = fullLine
         
-    # Run the processing
-    ims = []
-    hdrs = []
-    for i in range(nQuads):
-        im, hdr = solohi_fits2grid(fullQuadFiles[i])
-        ims.append(im)
-        hdrs.append(hdr)
+        # Run the processing
+        ims = []
+        hdrs = []
+        print ('|--- Processing SoloHI ---|')
+        for i in range(nQuads):
+            im, hdr = solohi_fits2grid(fullQuadFiles[i])
+            ims.append(im)
+            hdrs.append(hdr)
+    else:
+        print ('No processing for single SoloHI panel')
+        # Saving things... 
+        #with fits.open(aPair[0]) as hdulist:
+        #    im1  = hdulist[0].data
+        #    hdr1 = hdulist[0].header
+            
 
     # Add in the actual processing, saving, and output to runFile  
                         
