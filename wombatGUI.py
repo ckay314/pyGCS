@@ -32,7 +32,7 @@ slogger.setLevel(logging.ERROR)
 global occultDict, WFname2id
 # Nominal radii (in Rs) for the occulters for each instrument. Pulled from google so 
 # generally correct (hopefully) but not the most precise
-occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.1,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215]} 
+occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.1,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215], 'STEREO_SECCHI_EUVI':[0,1.7],} 
 WFname2id = {'GCS':1, 'Torus':2, 'Sphere':3, 'Half Sphere':4, 'Ellipse':5, 'Half Ellipse':6, 'Slab':7}
 
 class ParamWindow(QMainWindow):
@@ -648,13 +648,29 @@ class FigWindow(QWidget):
                     occultR = None
                 mywcs  = self.satStuff[self.tidx]['WCS']
                 myColor =wfs[i].WFcolor
-                for jj in range(len(wfs[i].points[:,0])):
+                # For the EUV panels, check if the WF is much higher
+                # than the FOV and just project it onto the surface
+                # instead if it is
+                flatEUV = False
+                if self.satStuff[self.tidx]['OBSTYPE'] == 'EUV':
+                    pts = wfs[i].points
+                    rs = np.sqrt(pts[:,0]**2 + pts[:,1]**2 + pts[:,2]**2)
+                    if np.mean(rs) > 1.5*self.satStuff[self.tidx]['FOV']:
+                        flatEUV = True
+                # Downselect to fewer points for proj EUV
+                toShow = range(len(wfs[i].points[:,0]))
+                if flatEUV:
+                    toShow = toShow[::2]
+                for jj in toShow:
                     pt = wfs[i].points[jj,:]
                     r = np.sqrt(pt[0]**2 + pt[1]**2 + pt[2]**2)
                     lat = np.arcsin(pt[2]/r) * 180/np.pi
                     lon = np.arctan2(pt[1],pt[0]) * 180 / np.pi
                     pt = [lat, lon, r*7e8]
+                    if flatEUV:
+                        pt = [lat, lon, 7e8]
                     myPt = pts2proj(pt, obs, obsScl, mywcs, center=cent, occultR=occultR)
+                   
                     if len(myPt) > 0:          
                         pos.append({'pos': [myPt[0][0], myPt[0][1]], 'pen':{'color':myColor, 'width':1}, 'brush': pg.mkBrush(myColor)})
                         
@@ -668,10 +684,11 @@ class FigWindow(QWidget):
         slMin = self.MinSlider.value()
         slMax = self.MaxSlider.value()
         self.image.updateImage(image=myIm, levels=(slMin, slMax))
-        if 'SUNCIRC' in self.satStuff[self.tidx]:
-            self.pWindow.plot(self.satStuff[self.tidx]['SUNCIRC'][0], self.satStuff[self.tidx]['SUNCIRC'][1])
-        if 'SUNNORTH' in self.satStuff[self.tidx]:
-            self.pWindow.plot(self.satStuff[self.tidx]['SUNNORTH'][0], self.satStuff[self.tidx]['SUNNORTH'][1], symbolSize=3, symbolBrush='w', pen=pg.mkPen(color='w', width=1))
+        if self.satStuff[self.tidx]['OBSTYPE'] != 'EUV':
+            if 'SUNCIRC' in self.satStuff[self.tidx]:
+                self.pWindow.plot(self.satStuff[self.tidx]['SUNCIRC'][0], self.satStuff[self.tidx]['SUNCIRC'][1])
+            if 'SUNNORTH' in self.satStuff[self.tidx]:
+                self.pWindow.plot(self.satStuff[self.tidx]['SUNNORTH'][0], self.satStuff[self.tidx]['SUNNORTH'][1], symbolSize=3, symbolBrush='w', pen=pg.mkPen(color='w', width=1))
         if self.labelIt:
             geom = self.pWindow.visibleRange()
             wid = geom.width()
@@ -794,7 +811,9 @@ def makeNiceMMs(imIn, hdr):
     if medval < 1e-20:
         xcuts = [99.9, 99, 99]
         linIm = linIm - np.median(linIm)
-        
+    # Attempt for EUV
+    elif medval > 1:
+        xcuts = [99, 99, 99]
     
     # Log Im
     #cpLin = np.copy(linIm)
@@ -875,6 +894,11 @@ def getSatStuff(imMap, diffDate=None):
             satDict['OBSTYPE'] = 'COR'
         else:
             satDict['OBSTYPE'] = 'EUV'
+            
+    # Add the wavelength if EUV
+    if satDict['OBSTYPE'] == 'EUV':
+        satDict['WAVE'] = str(myhdr['WAVELNTH'])
+        satDict['MYTAG'] = satDict['MYTAG'] + '_' + satDict['WAVE']
             
     shortNames = {'Parker Solar Probe':'PSP', 'Solar Orbiter':'SolO', 'STEREO_A':'STA', 'STEREO_B':'STB', 'SOHO':'SOHO'}
     satDict['SHORTNAME'] = shortNames[satDict['OBS']]

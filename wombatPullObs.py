@@ -7,8 +7,8 @@ from sunpy.time import parse_time
 
 obsFiles = '/Users/kaycd1/wombat/obsFiles/'
 
-startT = '2023/12/31T22:00'
-endT   = '2024/01/01T02:00'
+startT = '2023/03/04T12:00'
+endT   = '2023/03/04T16:00'
 
 # AIA setup
 doAIA = False
@@ -21,9 +21,9 @@ whichLASCO = ['C2', 'C3'] # Select from 'C2' or 'C3'
 LASCOtime = 20 # resolution to download in minutes 
 
 # SECCHI setup
-doSECCHI = False
+doSECCHI = True
 whichSECCHI = ['EUVI', 'COR1', 'COR2',  'HI1', 'HI2'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
-EUVIwav     = [195, 171] # Select from 171, 195, 284, 304
+EUVIwav     = [195] # Select from 171, 195, 284, 304
 EUVItime    = 20 # resolution to download in minutes 
 CORtime     = 20 # resolution to download in minutes 
 
@@ -31,7 +31,7 @@ CORtime     = 20 # resolution to download in minutes
 doSoloHI = False
 
 # WISPR setup
-doWISPR = True
+doWISPR = False
 whichWISPR = ['In', 'Out'] # options of 'In' and 'Out
 
 
@@ -70,26 +70,28 @@ if doAIA:
 
 if doLASCO:    
     result = Fido.search(a.Time(startT, endT), a.Instrument.lasco, a.Sample(LASCOtime*u.minute))
-    # fileids have format /archive/soho/private/data/processed/lasco/level_05/230304/c3/32733517.fts    
+    # fileids have format /archive/soho/private/data/processed/lasco/level_05/230304/c3/32733517.fts  
     whichC = [[], []]
     ymdts = [[], []]
     
-    for i in range(len(result[result.keys()[0]]['fileid'])):
-        if '/c2/' in result[result.keys()[0]]['fileid'][i]:
+    for i in range(len(result[0]['fileid'])):
+        # Don't pull the 512x512 images, have to check file
+        if ('/c2/' in result[0]['fileid'][i]) & (result[0]['Size'][i].to_value() > 1.1):
             whichC[0].append(i)
-            ymdts[0].append(str(result[0]['Start Time'][i])[0:10].replace('-','')+'T'+str(result[0]['Start Time'][i])[11:16].replace(':',''))
-        elif '/c3/' in result[result.keys()[0]]['fileid'][i]:
+            ymdts[0].append(str(result[0]['Start Time'][i])[0:10].replace('-','') + 'T' + str(result[0]['Start Time'][i])[11:16].replace(':',''))
+        elif ('/c3/' in result[0]['fileid'][i]) & (result[0]['Size'][i].to_value() > 1.1):
             whichC[1].append(i)
-            ymdts[1].append(str(result[0]['Start Time'][i])[0:10].replace('-','')+'T'+str(result[0]['Start Time'][i])[11:16].replace(':',''))
+            ymdts[1].append(str(result[0]['Start Time'][i])[0:10].replace('-','') + 'T' + str(result[0]['Start Time'][i])[11:16].replace(':',''))
+            
     if 'C2' in whichLASCO:
         if len(whichC[0]):
+            print('Dowloading LASCO C2 files...')
             for i in range(len(whichC[0])):
-                print('Dowloading LASCO C2 files...')
                 downloaded_files = Fido.fetch(result[0,whichC[0][i]], path=obsFiles + 'LASCO/' + ymdts[0][i] + '_C2_{file}') 
     if 'C3' in whichLASCO:
         if len(whichC[1]):
+            print('Dowloading LASCO C3 files...')
             for i in range(len(whichC[1])):
-                print('Dowloading LASCO C3 files...')
                 downloaded_files = Fido.fetch(result[0,whichC[1][i]], path=obsFiles + 'LASCO/' + ymdts[1][i] + '_C3_{file}') 
 
 
@@ -162,7 +164,7 @@ if doSECCHI:
             idxs = wavidx[i]
             #print (result[0,idxs])
             if len(idxs) > 0:
-                print('Dowloading STEREO EUVI ' + str(EUVIwabv[wavidx]) + ' files...')
+                print('Dowloading STEREO EUVI ' + str(EUVIwav[i]) + ' files...')
                 downloaded_files = Fido.fetch(result[0,idxs], path=obsFiles + 'SECCHI/EUVI_' + str(EUVIwav[i]) + 'a_{file}')          
     if 'COR1' in whichSECCHI:
         #print(result[0,whichC[0]])

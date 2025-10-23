@@ -106,11 +106,13 @@ else:
     #fnameC2 = '/Users/kaycd1/wombat/fits/solo_L2_solohi-4fg_20220329T055357_V02.fits'
 
 
-    # STEREO
-    aPair = [fnameA1, fnameA2]
-    ims, hdrs = secchi_prep([aPair[0], aPair[1]])
-    diff = ims[1] - ims[0]
-    diff = sunpy.map.Map(diff, hdrs[1])
+    # STEREO EUVI
+    aEUV = ['/Users/kaycd1/wombat/obsFiles/SECCHI/EUVI_304a_20230304_144545_n4eua.fts']
+    ims, hdrs = secchi_prep(aEUV)
+    #diff = ims[1] - ims[0]
+    diff = sunpy.map.Map(ims[0], hdrs[0])
+    # hack to make it run with single file
+    hdrs = [hdrs[0], hdrs[0]]
 
     '''bPair = [fnameB1, fnameB2]
     ims2, hdrs2 = secchi_prep([bPair[0], bPair[1]])
