@@ -12,6 +12,7 @@ from secchi_prep import secchi_prep
 from wispr_prep import wispr_prep
 from lasco_prep import c2_prep, c3_prep
 from solohi_prep import solohi_fits2grid
+from aia_prep import aia_prep
 
 #import matplotlib.image as mpimg
 
@@ -73,8 +74,8 @@ else:
     fnameA1 = 'fits/20120712_162400_d4c2A.fts'
     fnameA2 = 'fits/20120712_172400_d4c2A.fts' 
 
-    #fnameB1 = 'fits/20120712_162400_d4c2B.fts'
-    #fnameB2 = 'fits/20120712_172400_d4c2B.fts' 
+    fnameB1 = 'fits/20120712_162400_d4c2B.fts'
+    fnameB2 = 'fits/20120712_172400_d4c2B.fts' 
 
     #fnameB1 = 'fits/20120713_004901_s4h1A.fts'
     #fnameB2 = 'fits/20120713_072901_s4h1A.fts'
@@ -83,8 +84,8 @@ else:
     #fnameB1 = '/Users/kaycd1/wombat/fits/C2_22800178.fts'
     #fnameB2 = '/Users/kaycd1/wombat/fits/C2_22800186.fts'
 
-    fnameB1 = '/Users/kaycd1/wombat/fits/C3_32048310.fts'
-    fnameB2 = '/Users/kaycd1/wombat/fits/C3_32048311.fts'
+    #fnameB1 = '/Users/kaycd1/wombat/fits/C3_32048310.fts'
+    #fnameB2 = '/Users/kaycd1/wombat/fits/C3_32048311.fts'
 
     # PSP     
     #fnameB1 = 'fits/psp_L2_wispr_20210121T055621_V1_1211.fits'
@@ -114,18 +115,27 @@ else:
     # hack to make it run with single file
     hdrs = [hdrs[0], hdrs[0]]
 
-    '''bPair = [fnameB1, fnameB2]
+    bPair = [fnameB1, fnameB2]
     ims2, hdrs2 = secchi_prep([bPair[0], bPair[1]])
     diff2 = ims2[1] - ims2[0]
-    diff2 = sunpy.map.Map(diff2, hdrs2[1])'''
+    diff2 = sunpy.map.Map(diff2, hdrs2[1])
+    
+    # SDO AIA 
+    '''fname = ['/Users/kaycd1/wombat/obsFiles/AIA/aia_lev1_304a_2023_03_04t14_00_05_15z_image_lev1.fits']
+    ims = aia_prep(fname)
+    ims[0].meta['OBSRVTRY'] = 'SDO'
+    ims[0].meta['DETECTOR'] = 'AIA'
+    ims[0].meta['SC_ROLL'] = 0. # is rotated in aia_prep
+    hdrs = [ims[0].meta, ims[0].meta]
+    diff = ims[0]'''
      
     # LASCO 
-    bPair = [fnameB1, fnameB2]
+    '''bPair = [fnameB1, fnameB2]
     ims2, hdrs2 = c3_prep([bPair[0], bPair[1]])
     if hdrs2[1]['DETECTOR'] not in ['HI1', 'HI2']:
          diff2 = ims2[1] - ims2[0]
          hdrs2[1]['OBSRVTRY'] = 'SOHO'
-         diff2 = sunpy.map.Map(diff2, hdrs2[1])
+         diff2 = sunpy.map.Map(diff2, hdrs2[1])'''
      
     # PSP
     '''ims2, hdrs2 = wispr_prep([fnameB1, fnameB2], straylightOff=True)

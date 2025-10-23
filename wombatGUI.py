@@ -6,11 +6,15 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import wombatWF as wf
 import pyqtgraph as pg
+from sunpy.visualization.colormaps import color_tables
+
 
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
+from astropy import units as u
 
 
+from wombatLoadCTs import *
 
 from wcs_funs import fitshead2wcs, wcs_get_pixel, wcs_get_coord
 #from GCSgui import pts2proj
@@ -32,9 +36,10 @@ slogger.setLevel(logging.ERROR)
 global occultDict, WFname2id
 # Nominal radii (in Rs) for the occulters for each instrument. Pulled from google so 
 # generally correct (hopefully) but not the most precise
-occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.1,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215], 'STEREO_SECCHI_EUVI':[0,1.7],} 
+occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.1,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215], 'STEREO_SECCHI_EUVI':[0,1.7],'SDO_AIA':[0,1.3]} 
 WFname2id = {'GCS':1, 'Torus':2, 'Sphere':3, 'Half Sphere':4, 'Ellipse':5, 'Half Ellipse':6, 'Slab':7}
 
+        
 class ParamWindow(QMainWindow):
     def __init__(self, nTabs):
         super().__init__()
@@ -518,7 +523,16 @@ class FigWindow(QWidget):
         
         # make an image item
         self.image = pg.ImageItem()
+        #lut = np.zeros((256, 3), dtype=np.ubyte)
+        #lut[:128, 0] = np.arange(0, 256, 2)  # Red increases
+        #lut[128:, 0] = 255
+        #lut[:, 1] = np.arange(256)
+        hasCT = check4CT(satStuff[0])
+        if type(hasCT) != type(None):
+            self.image.setLookupTable(hasCT)
+        
         self.pWindow.addItem(self.image)
+        
         self.pWindow.setRange(xRange=(0,myObs[0][0].data.shape[0]), yRange=(0,myObs[0][0].data.shape[1]), padding=0)
         
         # Hide the axes
@@ -872,6 +886,10 @@ def getSatStuff(imMap, diffDate=None):
         satDict['OBS'] =  myhdr['obsrvtry'] 
         satDict['INST'] = myhdr['instrume'] + '_' + myhdr['detector']
         myTag   = myhdr['telescop'] + '_' + myhdr['instrume'] + '_' + myhdr['detector']
+    elif myhdr['obsrvtry'] == 'SDO':
+        satDict['OBS'] =  myhdr['obsrvtry'] 
+        satDict['INST'] = myhdr['detector']
+        myTag   = myhdr['obsrvtry'] + '_' + myhdr['detector']
     # Other less picky sats
     else:
         satDict['OBS'] =  myhdr['telescop']
@@ -894,15 +912,21 @@ def getSatStuff(imMap, diffDate=None):
             satDict['OBSTYPE'] = 'COR'
         else:
             satDict['OBSTYPE'] = 'EUV'
+    elif satDict['OBS'] == 'SDO':
+         satDict['OBSTYPE'] = 'EUV'
             
     # Add the wavelength if EUV
     if satDict['OBSTYPE'] == 'EUV':
         satDict['WAVE'] = str(myhdr['WAVELNTH'])
         satDict['MYTAG'] = satDict['MYTAG'] + '_' + satDict['WAVE']
             
-    shortNames = {'Parker Solar Probe':'PSP', 'Solar Orbiter':'SolO', 'STEREO_A':'STA', 'STEREO_B':'STB', 'SOHO':'SOHO'}
+    shortNames = {'Parker Solar Probe':'PSP', 'Solar Orbiter':'SolO', 'STEREO_A':'STA', 'STEREO_B':'STB', 'SOHO':'SOHO', 'SDO':'SDO'}
     satDict['SHORTNAME'] = shortNames[satDict['OBS']]
     
+    # get a color table if we can
+    if satDict['OBS'] == 'SDO':
+        ct = color_tables.aia_color_table(myhdr['WAVELNTH']*u.angstrom)
+        satDict['MYCT'] = ct
     
     # Get obs date/time
     if len(myhdr['date-obs']) > 13:
