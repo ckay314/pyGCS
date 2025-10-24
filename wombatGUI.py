@@ -519,14 +519,12 @@ class FigWindow(QWidget):
         
         self.pWindow = pg.PlotWidget()
         self.pWindow.setMinimumSize(400, 400)
+        self.pWindow.scene().sigMouseClicked.connect(self.mouse_clicked)
         layoutP.addWidget(self.pWindow,0,0,11,11,alignment=QtCore.Qt.AlignCenter)
         
         # make an image item
         self.image = pg.ImageItem()
-        #lut = np.zeros((256, 3), dtype=np.ubyte)
-        #lut[:128, 0] = np.arange(0, 256, 2)  # Red increases
-        #lut[128:, 0] = 255
-        #lut[:, 1] = np.arange(256)
+
         hasCT = check4CT(satStuff[0])
         if type(hasCT) != type(None):
             self.image.setLookupTable(hasCT)
@@ -557,9 +555,9 @@ class FigWindow(QWidget):
         layoutP.addWidget(minL, 13,0,1,9)
         self.MinSlider = QSlider()
         self.MinSlider.setOrientation(QtCore.Qt.Horizontal)
-        self.MinSlider.setMinimum(-150)
-        self.MinSlider.setMaximum(200)
-        self.MinSlider.setValue(-50)
+        self.MinSlider.setMinimum(0)
+        self.MinSlider.setMaximum(255)
+        self.MinSlider.setValue(satStuff[0]['SLIVALS'][0][0])
         layoutP.addWidget(self.MinSlider, 13,3,1,9)
         self.MinSlider.valueChanged.connect(lambda x: self.s2l(x, minL, 'Min Value: '))  
         
@@ -567,11 +565,17 @@ class FigWindow(QWidget):
         layoutP.addWidget(maxL, 15,0,1,9)
         self.MaxSlider = QSlider()
         self.MaxSlider.setOrientation(QtCore.Qt.Horizontal)
-        self.MaxSlider.setMinimum(-150)
-        self.MaxSlider.setMaximum(200)
-        self.MaxSlider.setValue(50)
+        self.MaxSlider.setMinimum(0)
+        self.MaxSlider.setMaximum(255)
+        self.MaxSlider.setValue(satStuff[0]['SLIVALS'][1][0])
         layoutP.addWidget(self.MaxSlider, 15,3,1,9)
         self.MaxSlider.valueChanged.connect(lambda x: self.s2l(x, maxL, 'Max Value: '))  
+        
+        # If EUV switch to log at the start. Have to do after
+        # weve addded the sliders since will adjust them
+        if self.satStuff[0]['OBSTYPE'] == 'EUV':
+            self.cbox.setCurrentIndex(1)
+        
         
         saveBut = QPushButton('Save')
         saveBut.released.connect(self.SBclicked)
@@ -620,7 +624,9 @@ class FigWindow(QWidget):
     
 
     def back_changed(self,text):
-        self.sclidx = text     
+        self.sclidx = text   
+        self.MinSlider.setValue(self.satStuff[0]['SLIVALS'][0][int(text)])  
+        self.MaxSlider.setValue(self.satStuff[0]['SLIVALS'][1][int(text)])  
         self.plotBackground()
             
        
@@ -633,6 +639,19 @@ class FigWindow(QWidget):
 
     def MBclicked(self):
         print('Mass not coded yet')
+    
+    def mouse_clicked(self,event):
+        scene_pos = event.scenePos()
+        
+        view_pos = self.pWindow.plotItem.vb.mapSceneToView(scene_pos)
+        pix = [view_pos.x(), view_pos.y()]
+        prefA = self.satStuff[self.tidx]['MYTAG'] + ' pix:'
+        print (prefA, str(int(pix[0])).rjust(8), str(int(pix[1])).rjust(8))
+        
+        # Convert to ra/dec
+        skyres = self.OGims[self.tidx].pixel_to_world(pix[0]*u.pixel, pix[1]*u.pixel)
+        print ('Tx, Ty (arcsec):'.rjust(len(prefA)), str(int(skyres.Tx.to_value())).rjust(8), str(int(skyres.Ty.to_value())).rjust(8))
+        
         
     #|------------------------------| 
     #|----------- Others -----------|
@@ -662,6 +681,12 @@ class FigWindow(QWidget):
                     occultR = None
                 mywcs  = self.satStuff[self.tidx]['WCS']
                 myColor =wfs[i].WFcolor
+                # change pen wid if HI
+                penwid =1
+                if self.satStuff[self.tidx]['OBSTYPE'] == 'HI':
+                    penwid = 4
+                
+                
                 # For the EUV panels, check if the WF is much higher
                 # than the FOV and just project it onto the surface
                 # instead if it is
@@ -675,6 +700,9 @@ class FigWindow(QWidget):
                 toShow = range(len(wfs[i].points[:,0]))
                 if flatEUV:
                     toShow = toShow[::2]
+                    myColor = '#C81CDE'
+                    occultR = 1. * self.satStuff[self.tidx]['ONERSUN']
+                
                 for jj in toShow:
                     pt = wfs[i].points[jj,:]
                     r = np.sqrt(pt[0]**2 + pt[1]**2 + pt[2]**2)
@@ -686,7 +714,7 @@ class FigWindow(QWidget):
                     myPt = pts2proj(pt, obs, obsScl, mywcs, center=cent, occultR=occultR)
                    
                     if len(myPt) > 0:          
-                        pos.append({'pos': [myPt[0][0], myPt[0][1]], 'pen':{'color':myColor, 'width':1}, 'brush': pg.mkBrush(myColor)})
+                        pos.append({'pos': [myPt[0][0], myPt[0][1]], 'pen':{'color':myColor, 'width':penwid}, 'brush':pg.mkBrush(myColor)})
                         
                 self.scatters[i].setData(pos)
                 
@@ -803,63 +831,58 @@ class OverviewWindow(QWidget):
         elif event.key() == QtCore.Qt.Key_Escape:
             sys.exit()
 
-def makeNiceMMs(imIn, hdr):
-    # Clean out any nans
-    im = imIn.data
+def makeNiceMMs(imIn, hdr, satStuff):
+    # Transpose and get perc values ignoring the NaNs
+    im = np.transpose(imIn.data)
     imNonNaN = im[~np.isnan(im)]
     medval  = np.median(np.abs(imNonNaN))
     
-    # Transpose it 
-    im[np.isnan(im)] = 0
-    im = np.transpose(im)
+    myInst = satStuff['INST']
+    # mins/maxs on percentiles by instrument [[lower], [upper]] with [lin, log, sqrt]
+    pMMs = {'AIA':[[0.001,10,1], [99,99,99]], 'SECCHI_EUVI':[[0.001,10,1], [99,99,99]], 'LASCO_C2':[[15,1,15], [97,99,97]], 'LASCO_C3':[[40,1,10], [99,99,90]], 'SECCHI_COR1':[[20,1,10], [90,99,90]], 'SECCHI_COR2':[[20,1,10], [90,99,90]], 'WISPR_HI1':[[1,40,1], [99.9,80,99.9]], 'WISPR_HI2':[[1,40,1], [99.9,80,99.9]], 'SoloHI':[[1,40,1], [99.5,80,99.5]] }
     
+    sliVals = {'AIA':[[0,0,0], [191,191,191]], 'SECCHI_EUVI':[[0,32,0], [191,191,191]], 'LASCO_C2':[[0,0,21],[191,191,191]], 'LASCO_C3':[[37,0,37],[191,191,191]], 'SECCHI_COR1':[[0,0,21],[128,191,191]], 'SECCHI_COR2':[[0,0,21],[128,191,191]], 'WISPR_HI1':[[0,0,21],[128,191,191]], 'WISPR_HI2':[[0,0,21],[128,191,191]], 'SoloHI':[[0,0,21],[128,191,191]]}
+    
+    #pMMs = {'EUV':[[0.001,10,1], [99,99,99]], 'COR':[[20,1,10], [90,99,90]], 'HI':[[1,1,1], [99.9,99,99]]}
+    #sliVals = {'EUV':[[0,0,0], [191,191,191]], 'COR':[[0,0,21],[128,191,191]], 'HI':[[1,1,1], [99.9,99,99]]}
+    myMM = pMMs[myInst]
+    mySliVals = sliVals[myInst]
+    satStuff['SLIVALS'] = mySliVals
+    
+    # remove the nans
+    im[np.isnan(im)] = 0
     
     # Linear Image
-    sclLin = 1 / medval
-    linIm  = im*sclLin
+    linMin, linMax = np.percentile(imNonNaN, myMM[0][0]), np.percentile(imNonNaN, myMM[1][0])  
+    rng = linMax- linMin
+    linIm = (im - linMin) * 255 / rng
     
+    # Log im
+    tempIm = im / medval
+    minVal = np.percentile(np.abs(tempIm),myMM[0][1])
+    pidx = np.where(tempIm > minVal)
+    nidx = np.where(tempIm < -minVal)
+    logIm = np.zeros(tempIm.shape)
+    logIm[np.where(np.abs(tempIm) < minVal)] = 1
+    logIm[pidx] = np.log(tempIm[pidx] - minVal + 1)  
+    logIm[nidx] = -np.log(-tempIm[nidx] - minVal + 1)  
+    #minLog, maxLog = np.percent(logIm, myMM[1][0]), np.percent(logIm, myMM[1][1])
+    perc95 = np.percentile(logIm, myMM[1][1])
+    logIm = 191 * logIm / perc95
     
-    xcuts = [90, 95, 90]
-    shiftIt = 0
-    # Attempt to use medval to flag HI not COR
-    if medval < 1e-20:
-        xcuts = [99.9, 99, 99]
-        linIm = linIm - np.median(linIm)
-    # Attempt for EUV
-    elif medval > 1:
-        xcuts = [99, 99, 99]
+    # SQRT image
+    tempIm = im / medval
+    minVal = np.percentile(tempIm,myMM[0][2])
+    tempIm = tempIm - minVal # set minVal at zero
+    tempIm[np.where(tempIm < 0)] = 0
+    sqrtIm = np.sqrt(tempIm)
     
-    # Log Im
-    #cpLin = np.copy(linIm)
-    minVal = np.percentile(np.abs(linIm),10)
-    pidx = np.where(linIm > minVal)
-    nidx = np.where(linIm < -minVal)
-    logIm = np.zeros(linIm.shape)
-    logIm[np.where(np.abs(linIm) < minVal)] = 1
-    logIm[pidx] = np.log(linIm[pidx] - minVal + 1)  
-    logIm[nidx] = -np.log(-linIm[nidx] - minVal + 1)  
-    
-    perc95 = np.percentile(logIm, xcuts[1])
-    logIm = 100 * logIm / perc95   
-   
-    # SQRT im
-    # mostly the same as log prep
-    pidx = np.where(linIm > 0)
-    nidx = np.where(linIm < -0)
-    sqrtIm = np.zeros(linIm.shape)
-    sqrtIm[pidx] = np.sqrt(linIm[pidx])
-    sqrtIm[nidx] = -np.sqrt(-linIm[nidx])
-    
-    percX = np.percentile(sqrtIm, xcuts[2])
-    sqrtIm = 100 * sqrtIm / percX
-    
-    # Scale the lin img down here so others can use before
-    #linIm = linIm + shiftIt
-    percX = np.percentile(linIm, xcuts[0])
-    linIm = 100 * linIm / percX
+    percX = np.percentile(sqrtIm, myMM[1][2])
+    sqrtIm = 191 * sqrtIm / percX
+      
     
     sclIms = [linIm, logIm,  sqrtIm]
-    return sclIms
+    return sclIms, satStuff
     
 def getSatStuff(imMap, diffDate=None):
     # Set up satDict as a micro header that we will package the mask in
@@ -870,7 +893,6 @@ def getSatStuff(imMap, diffDate=None):
     # Get the name 
     myhdr   = imMap.meta
     satDict['OBS'] =  myhdr['obsrvtry']
-    
     
     # PSP format
     if myhdr['obsrvtry'] == 'Parker Solar Probe':
@@ -901,7 +923,7 @@ def getSatStuff(imMap, diffDate=None):
     if satDict['OBS'] in ['Parker Solar Probe', 'Solar Orbiter']:
         satDict['OBSTYPE'] = 'HI'
     elif satDict['OBS'] in ['STEREO_A', 'STEREO_B']:
-        if myhdr['instrume'] in ['COR1', 'COR2']:
+        if myhdr['detector'] in ['COR1', 'COR2']:
             satDict['OBSTYPE'] = 'COR'
         elif myhdr['instrume'] in ['HI1', 'HI2']:
             satDict['OBSTYPE'] = 'HI'
@@ -914,7 +936,7 @@ def getSatStuff(imMap, diffDate=None):
             satDict['OBSTYPE'] = 'EUV'
     elif satDict['OBS'] == 'SDO':
          satDict['OBSTYPE'] = 'EUV'
-            
+
     # Add the wavelength if EUV
     if satDict['OBSTYPE'] == 'EUV':
         satDict['WAVE'] = str(myhdr['WAVELNTH'])
@@ -978,12 +1000,14 @@ def getSatStuff(imMap, diffDate=None):
         myDist = imMap.observer_coordinate.radius.m / 7e8
         myRs   = np.arctan2(1, myDist) * 206265
     oners = myRs/imMap.scale[0].to_value()
+    if imMap.scale[0].unit == 'deg / pix':
+        oners = oners / 3600
     satDict['ONERSUN'] = oners
     
     # Get location of edges
     myFOV = 0
-    for i in [0,-1]:
-        for j in [0,-1]:
+    for i in [0,imMap.data.shape[0]-1]:
+        for j in [0,imMap.data.shape[1]-1]:
             coord = wcs_get_coord(myWCS, pixels = np.array([i,j]))
             edgeR = np.sqrt(coord[0]**2 + coord[1]**2)
             thisFOV = edgeR / obsScl / oners
@@ -1160,8 +1184,8 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
         satScls = []
         someStuff = []
         for j in range(len(obsFiles[i][0])):
-            sclIm = makeNiceMMs(obsFiles[i][0][j], obsFiles[i][1][j])
             mySatStuff = getSatStuff(obsFiles[i][0][j], diffDate=obsFiles[i][1][j]['DATE-OBS0'])
+            sclIm, mySatStuff = makeNiceMMs(obsFiles[i][0][j], obsFiles[i][1][j], mySatStuff)
             # Check if it made a mask and just use it now if so
             if 'MASK' in mySatStuff:
                 midx = np.where(mySatStuff['MASK'] == 1)
