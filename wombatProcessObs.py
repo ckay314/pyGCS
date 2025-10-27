@@ -11,6 +11,8 @@ from secchi_prep import secchi_prep
 from wispr_prep import wispr_prep
 from lasco_prep import c2_prep, c3_prep
 from solohi_prep import solohi_fits2grid
+from aia_prep import aia_prep
+
 
 # This routine takes already downloaded files and performs all the
 # calibration so that they are ready for the wombat gui
@@ -27,39 +29,53 @@ from solohi_prep import solohi_fits2grid
 # Base folder for where the files are stored 
 obsFiles = '/Users/kaycd1/wombat/obsFiles/'
 
+# Folder for where the processed files are stored 
+proFiles = '/Users/kaycd1/wombat/wbfits/'
+
+
 # Start and end time of the period of interest
-startT = '2023/03/02T12:00'
+startT = '2023/03/04T12:00'
 endT   = '2023/03/04T16:00'
 
 #startT = '2023/12/31T22:00'
 #endT   = '2024/01/01T02:00'
 
+# File name that will hold the list of processed observations
+# that we can use to reload WB quicker
+outFile = 'WBobs.txt'
+
+
 # Difference mode - option to save as base or running diff or just keep as is
-diffMode = 'AsIs' # Select from 'AsIs', 'Base', 'Run'
-noDiffEUV = True  # keep the EUV images as is instead of base/running diffs 
+#diffMode = 'AsIs' # Select from 'AsIs', 'Base', 'Run'
+#noDiffEUV = True  # keep the EUV images as is instead of base/running diffs 
 
 # AIA setup
-doAIA = False
-AIAwav = [171, 193, 304] # Select from 94, 131, 171*, 193*, 211, 304*, 335, 1600, 1700 (* most common)
+doAIA = True
+AIAwav = [171,193, 304] # Select from 94, 131, 171*, 193*, 211, 304*, 335, 1600, 1700 (* most common)
 
 # LASCO setup
-doLASCO = False
+doLASCO = True
 whichLASCO = ['C2', 'C3'] # Select from 'C2' and 'C3'
 
 # SECCHI setup
 doSECCHI = True
 #whichSECCHI = ['EUVI', 'COR1', 'COR2',  'HI1', 'HI2'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
-whichSECCHI = ['COR1'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
+whichSECCHI = ['EUVI','COR1', 'COR2',  'HI1', 'HI2'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
 EUVIwav     = [195, 171] # Select from 171, 195, 284, 304
 
 # SoloHI setup
-doSoloHI = False
-whichSoloHI = ['Quad'] # options of 'Quad' or 'Single'
+doSoloHI = True
+whichSoloHI = ['Single'] # options of 'Quad' or 'Single'
 
 # WISPR setup
-doWISPR = False
+doWISPR = True
 whichWISPR = ['In', 'Out'] # options of 'In' and 'Out
 
+
+# |-------------------------------|
+# |--- Open up the output file ---|
+# |-------------------------------|
+f1 = open(outFile, 'w')
 
 # |-------------------------------|
 # |------- Setup Time Stuff ------|
@@ -121,7 +137,7 @@ if doAIA:
                 if (hm >= hm0) & (hm <= hmf):
                     for i in range(nWav):
                         if '_'+str(AIAwav[i])+'a_' in aF:
-                            goodFiles[i].append(aF)
+                            goodFiles[i].append(obsFiles+'AIA/'+aF)
         else:
             for j in range(nDays):
                 if AIAdatestrs[j] in aF:
@@ -134,12 +150,29 @@ if doAIA:
                     if addIt:
                         for i in range(nWav):
                             if '_'+str(AIAwav[i])+'a_' in aF:
-                                goodFiles[i].append(aF)
-    # Make an array and make sure sorted               
+                                goodFiles[i].append(obsFiles+'AIA/'+aF)
+    # Make an array and make sure sorted   
+    print ('|--- Processing SDO AIA ---|')            
     for i in range(nWav):
+        print ('|--- Processing SDO AIA '+str(AIAwav[i])+'---|')            
+        f1.write('SDO_AIA_'+str(AIAwav[i]) + '\n')
         goodFiles[i] = np.sort(np.array(goodFiles[i]))
+        ims = aia_prep(goodFiles[i])
+        for k in range(len(ims)):
+            print ('On file '+str(i+1)+' out of '+str(len(ims)))
+            im = ims[k]
+            # Add extra keywords wombat wants
+            im.meta['OBSRVTRY'] = 'SDO'
+            im.meta['DETECTOR'] = 'AIA'
+            im.meta['SC_ROLL'] = 0.
+            # Set up output filename
+            ymd = im.meta['DATE'].replace('-','').replace(':','')
+            fitsName = 'wbpro_aia'+str(AIAwav[i])+'_'+ymd+'.fits'
+            # Save the fits file
+            im.save(proFiles+fitsName, overwrite=True)
+            # Add it to the list of avail obs
+            f1.write(proFiles+fitsName+'\n')
         
-    # Add in the actual processing, saving, and output to runFile  
  
 
 # |-------------------------------|
@@ -188,10 +221,21 @@ if doLASCO:
     if 'C2' in whichLASCO:
         print ('|---- Processing LASCO C2 ----|')
         imsc2, hdrsc2 = c2_prep(goodFiles[0])    
+        f1.write('LASCO_C2' + '\n')
+        for i in range(len(imsc2)):
+            ymd = hdrsc2[i]['DATE-OBS'].replace('/','')+'T'+hdrsc2[i]['TIME-OBS'].replace(':','')[:6]
+            fitsName = 'wbpro_lascoC2'+'_'+ymd+'.fits'
+            fits.writeto(proFiles+fitsName, imsc2[i], hdrsc2[i], overwrite=True)
+            f1.write(proFiles+fitsName+'\n')
     if 'C3' in whichLASCO:
         print ('|---- Processing LASCO C3 ----|')
         imsc3, hdrsc3 = c3_prep(goodFiles[1])    
-                               
+        f1.write('LASCO_C3' + '\n')
+        for i in range(len(imsc3)):
+            ymd = hdrsc3[i]['DATE-OBS'].replace('/','')+'T'+hdrsc3[i]['TIME-OBS'].replace(':','')[:6]
+            fitsName = 'wbpro_lascoC3'+'_'+ymd+'.fits'
+            fits.writeto(proFiles+fitsName, imsc3[i], hdrsc3[i], overwrite=True)
+            f1.write(proFiles+fitsName+'\n')
             
 # |-------------------------------|
 # |------- Process SECCHI --------|
@@ -203,6 +247,8 @@ if doSECCHI:
     
     # Sort everything first and just process what we want
     goodFiles = {'a':[[] for i in range(5)], 'b':[[] for i in range(5)]}
+    goodFiles['a'][0] = [[] for i in range(len(EUVIwav))]
+    goodFiles['b'][0] = [[] for i in range(len(EUVIwav))]
     
     # Dictionary to convert prefix to index for good f
     pre2ind = {'EUVI':0, 'COR1':1, 'COR2':2, 'HI1_':3, 'HI2_':4}
@@ -219,7 +265,12 @@ if doSECCHI:
                 hm = aF[stidx+10:stidx+14]
                 if (hm >= hm0) & (hm <= hmf):
                     whichInst = pre2ind[aF[:4]]
-                    goodFiles[aF[-5]][whichInst].append(obsFiles+'SECCHI/'+aF)
+                    if whichInst != 0:
+                        goodFiles[aF[-5]][whichInst].append(obsFiles+'SECCHI/'+aF)
+                    else:
+                        for k in range(len(EUVIwav)):
+                            if (str(EUVIwav[k])+'a') in aF:
+                                goodFiles[aF[-5]][0][k].append(obsFiles+'SECCHI/'+aF)
         else:
             for j in range(nDays):
                 if ymds[j] in aF:
@@ -237,15 +288,53 @@ if doSECCHI:
                         addIt = False
                     if addIt:
                         whichInst = pre2ind[aF[:4]]
-                        goodFiles[aF[-5]][whichInst].append(obsFiles+'SECCHI/'+aF)
+                        if whichInst != 0:
+                            goodFiles[aF[-5]][whichInst].append(obsFiles+'SECCHI/'+aF)
+                        else:
+                            for k in range(len(EUVIwav)):
+                                if (str(EUVIwav[k])+'a') in aF:
+                                    goodFiles[aF[-5]][0][k].append(obsFiles+'SECCHI/'+aF)
     
     for i in range(len(goodFiles['a'])):
-        goodFiles['a'][i] = np.sort(np.array(goodFiles['a'][i]))
+        if i != 0:
+            goodFiles['a'][i] = np.sort(np.array(goodFiles['a'][i]))
+        else:
+            for k in range(len(EUVIwav)):
+                goodFiles['a'][0][k] = np.sort(np.array(goodFiles['a'][0][k]))
     for i in range(len(goodFiles['b'])):
-        goodFiles['b'][i] = np.sort(np.array(goodFiles['b'][i]))
+        if i !=0:
+            goodFiles['b'][i] = np.sort(np.array(goodFiles['b'][i]))
+        else:
+            for k in range(len(EUVIwav)):
+                goodFiles['b'][0][k] = np.sort(np.array(goodFiles['b'][0][k]))
                 
     # Add in the actual processing, saving, and output to runFile  
-    #if 'EUVI' in whichSECCHI:
+    if 'EUVI' in whichSECCHI:
+        tots = np.sum(np.array([len(goodFiles['a'][0][k]) for k in range(len(EUVIwav))]))
+        if tots > 0:
+            print ('|--- Processing STEREO EUVIA ---|')
+        for k in range(len(EUVIwav)):
+            if len(goodFiles['a'][0][k]) > 0:
+                f1.write('STA_EUVI_'+str(EUVIwav[k]) + '\n')
+                imsc2a, hdrsc2a = secchi_prep(goodFiles['a'][0][k]) 
+                for i in range(len(imsc2a)):
+                    ymd = hdrsc2a[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                    fitsName = 'wbpro_staeuvi'+str(EUVIwav[k])+'_'+ymd+'.fits'      
+                    fits.writeto(proFiles+fitsName, imsc2a[i], hdrsc2a[i], overwrite=True)
+                    f1.write(proFiles+fitsName+'\n')
+        tots = np.sum(np.array([len(goodFiles['b'][0][k]) for k in range(len(EUVIwav))]))
+        if tots > 0:
+            print ('|--- Processing STEREO EUVIB ---|')
+            for k in range(len(EUVIwav)):
+                if len(goodFiles['b'][0][k]) > 0:
+                    f1.write('STB_EUVI_'+str(EUVIwav[k]) + '\n')
+                    imsc2b, hdrsc2b = secchi_prep(goodFiles['b'][0])
+                    for i in range(len(imsc2b)):
+                        ymd = hdrsc2b[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                        fitsName = 'wbpro_stbeuvi'+str(EUVIwav[k])+'_'+ymd+'.fits'      
+                        fits.writeto(proFiles+fitsName, imsc2b[i], hdrsc2b[i], overwrite=True)
+                        f1.write(proFiles+fitsName+'\n')
+                   
     if 'COR1' in whichSECCHI:   
         # Pull script makes sure we have triplets so should be able to 
         # just pass sets of 3
@@ -256,11 +345,20 @@ if doSECCHI:
                 for i in range(int(len(goodFiles['a'][1])/3)):
                     print ('      on triplet ' +str(1+i))
                     aIm, aHdr = secchi_prep(goodFiles['a'][1][3*i:3*(i+1)], polarizeOn=True, silent=True)
-                    ims1a.append(aIm)
-                    hdrs1a.append(aHdr)
+                    ims1a.append(aIm[0])
+                    hdrs1a.append(aHdr[0])
             else:
                 sys.exit('Passed bad number of pB triplets for COR1A')
-
+            
+            # Save the results
+            if len(ims1a) > 0:
+                f1.write('STEREOA_COR1 \n')
+                for i in range(len(ims1a)):
+                    ymd = hdrs1a[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                    fitsName = 'wbpro_stacor1_'+ymd+'.fits'      
+                    fits.writeto(proFiles+fitsName, ims1a[i], hdrs1a[i], overwrite=True)
+                    f1.write(proFiles+fitsName+'\n')
+                
         if len(goodFiles['b'][1]) > 0:
             if (len(goodFiles['b'][1]) % 3) == 0:
                 ims1b, hdrs1b = [], []
@@ -272,29 +370,81 @@ if doSECCHI:
                     hdrs1b.append(bHdr)
             else:
                 sys.exit('Passed bad number of pB triplets for COR1B')
+        
+            # Save the results
+            if len(ims1b) > 0:
+                f1.write('STEREOB_COR1 \n')
+                for i in range(len(ims1b)):
+                    ymd = hdrs1b[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                    fitsName = 'wbpro_stbcor1_'+ymd+'.fits'      
+                    fits.writeto(proFiles+fitsName, ims1b[i], hdrs1b[i], overwrite=True)
+                    f1.write(proFiles+fitsName+'\n')
+            
           
     if 'COR2' in whichSECCHI:   
         if len(goodFiles['a'][2]) > 0:
             print ('|--- Processing STEREO COR2A ---|')
+            f1.write('STEREOA_COR2 \n')
             imsc2a, hdrsc2a = secchi_prep(goodFiles['a'][2]) 
+            for i in range(len(imsc2a)):
+                ymd = hdrsc2a[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                fitsName = 'wbpro_stacor2_'+ymd+'.fits'      
+                fits.writeto(proFiles+fitsName, imsc2a[i], hdrsc2a[i], overwrite=True)
+                f1.write(proFiles+fitsName+'\n')
+                
         if len(goodFiles['b'][2]) > 0:
             print ('|--- Processing STEREO COR2B ---|')
+            f1.write('STEREOB_COR2 \n')
             imsc2b, hdrsc2b = secchi_prep(goodFiles['b'][2])
+            for i in range(len(imsc2b)):
+                ymd = hdrsc2b[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                fitsName = 'wbpro_stbcor2_'+ymd+'.fits'      
+                fits.writeto(proFiles+fitsName, imsc2b[i], hdrsc2b[i], overwrite=True)
+                f1.write(proFiles+fitsName+'\n')
+
     if 'HI1' in whichSECCHI:   
         if len(goodFiles['a'][3]) > 0:
             print ('|--- Processing STEREO HI1A ---|')
+            f1.write('STEREOA_HI1 \n')
             imsh1a, hdrsh1a = secchi_prep(goodFiles['a'][3]) 
+            for i in range(len(imsh1a)):
+                ymd = hdrsh1a[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                fitsName = 'wbpro_stahi1_'+ymd+'.fits'      
+                fits.writeto(proFiles+fitsName, imsh1a[i], hdrsh1a[i], overwrite=True)
+                f1.write(proFiles+fitsName+'\n')
+                
         if len(goodFiles['b'][3]) > 0:
             print ('|--- Processing STEREO HI1B ---|')
+            f1.write('STEREOB_HI1 \n')
             imsh1b, hdrsh1b = secchi_prep(goodFiles['b'][3]) 
+            for i in range(len(imsh1b)):
+                ymd = hdrsh1b[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                fitsName = 'wbpro_stbhi1_'+ymd+'.fits'      
+                fits.writeto(proFiles+fitsName, imsh1b[i], hdrsh1b[i], overwrite=True)
+                f1.write(proFiles+fitsName+'\n')
+
     if 'HI2' in whichSECCHI:   
         if len(goodFiles['a'][4]) > 0:
             print ('|--- Processing STEREO HI2A ---|')
+            f1.write('STEREOA_HI2 \n')
             imsh2a, hdrsh2a = secchi_prep(goodFiles['a'][4]) 
+            for i in range(len(imsh2a)):
+                ymd = hdrsh2a[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                fitsName = 'wbpro_stahi2_'+ymd+'.fits'      
+                fits.writeto(proFiles+fitsName, imsh2a[i], hdrsh2a[i], overwrite=True)
+                f1.write(proFiles+fitsName+'\n')
+                
         if len(goodFiles['b'][4]) > 0:
             print ('|--- Processing STEREO HI2B ---|')
+            f1.write('STEREOB_HI2 \n')
             imsh2b, hdrsh2b = secchi_prep(goodFiles['b'][4]) 
-        
+            for i in range(len(imsh2b)):
+                ymd = hdrsh2b[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                fitsName = 'wbpro_stbhi2_'+ymd+'.fits'      
+                fits.writeto(proFiles+fitsName, imsh2b[i], hdrsh2b[i], overwrite=True)
+                f1.write(proFiles+fitsName+'\n')
+                
+                
 # |-------------------------------|
 # |------- Process SoloHI --------|
 # |-------------------------------|
@@ -346,7 +496,8 @@ if doSoloHI:
         prefixs = ['solo_L2_solohi-1ft_', 'solo_L2_solohi-2ft_', 'solo_L2_solohi-3fg_', 'solo_L2_solohi-4fg_']
         for i in range(4):
             for j in range(len(goodFiles[i])):
-                thisT = parse_time(goodFiles[i][j].replace(prefixs[i],'').replace('_V01.fits',''))
+                print (goodFiles[i])
+                thisT = parse_time(goodFiles[i][j].replace(prefixs[i],'').replace('_V01.fits','').replace('_V02.fits',''))
                 shTimes[i].append(thisT)
         # Figure out which has the most obs
         nEach =[len(shTimes[i]) for i in range(4)]
@@ -387,15 +538,23 @@ if doSoloHI:
             im, hdr = solohi_fits2grid(fullQuadFiles[i])
             ims.append(im)
             hdrs.append(hdr)
-    else:
-        print ('No processing for single SoloHI panel')
-        # Saving things... 
-        #with fits.open(aPair[0]) as hdulist:
-        #    im1  = hdulist[0].data
-        #    hdr1 = hdulist[0].header
             
-
-    # Add in the actual processing, saving, and output to runFile  
+        # Save the results
+        if len(im) > 0:
+            f1.write('SolOHI_Quad \n')
+            for i in range(len(ims)):
+                ymd = hdrs[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                fitsName = 'wbpro_solohiquad_'+ymd+'.fits'      
+                fits.writeto(proFiles+fitsName, ims[i], hdrs[i], overwrite=True)
+                f1.write(proFiles+fitsName+'\n')
+                
+    else:
+        print ('No processing for single SoloHI panel, can pass fits directly to GUI')
+        for i in range(4):
+            if len(goodFiles[i]) > 0:
+                f1.write('SolOHI_'+str(i+1)+'\n')
+                for j in range(len(goodFiles[i])):
+                    f1.write(obsFiles+'SoloHI/'+goodFiles[i][j]+'\n')
                         
         
 # |-------------------------------|
@@ -440,8 +599,22 @@ if doWISPR:
     if 'In' in whichWISPR:
         print ('|--- Processing WISPR Inner ---|')
         imsI, hdrsI = wispr_prep(goodFiles[0], straylightOff=True)
+        f1.write('WISPR_Inner' + '\n')
+        for i in range(len(imsI)):
+            ymd = hdrsI[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+            fitsName = 'wbpro_wispin'+'_'+ymd+'.fits'
+            fits.writeto(proFiles+fitsName, imsI[i], hdrsI[i], overwrite=True)
+            f1.write(proFiles+fitsName+'\n')
+        
     if 'Out' in whichWISPR:
         print ('|--- Processing WISPR Outer ---|')
         imsO, hdrsO = wispr_prep(goodFiles[0], straylightOff=True)
-        
+        f1.write('WISPR_Outer' + '\n')
+        for i in range(len(imsO)):
+            ymd = hdrsO[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+            fitsName = 'wbpro_wispin'+'_'+ymd+'.fits'
+            fits.writeto(proFiles+fitsName, imsO[i], hdrsO[i], overwrite=True)
+            f1.write(proFiles+fitsName+'\n')
+
+f1.close()        
  
