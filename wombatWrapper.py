@@ -108,8 +108,8 @@ else:
     file3B = '/Users/kaycd1/wombat/fits/solo_L2_solohi-3fg_20220329T051757_V02.fits'
     file4B = '/Users/kaycd1/wombat/fits/solo_L2_solohi-4fg_20220329T052957_V02.fits'
     
-    #fnameC1 = '/Users/kaycd1/wombat/fits/solo_L2_solohi-4fg_20220329T052957_V02.fits'
-    #fnameC2 = '/Users/kaycd1/wombat/fits/solo_L2_solohi-4fg_20220329T055357_V02.fits'
+    fnameC1 = '/Users/kaycd1/wombat/fits/solo_L2_solohi-4fg_20220329T052957_V02.fits'
+    fnameC2 = '/Users/kaycd1/wombat/fits/solo_L2_solohi-4fg_20220329T055357_V02.fits'
 
     '''filenames12 = ['/Users/kaycd1/wombat/obsFiles/SECCHI/COR1_20230304_120600_n4c1a.fts', '/Users/kaycd1/wombat/obsFiles/SECCHI/COR1_20230304_120618_n4c1a.fts', '/Users/kaycd1/wombat/obsFiles/SECCHI/COR1_20230304_120636_n4c1a.fts']
 
@@ -174,12 +174,12 @@ else:
          print (g)'''
 
     # PSP
-    ims2, hdrs2 = wispr_prep([fnameW1, fnameW2], straylightOff=True)
+    '''ims2, hdrs2 = wispr_prep([fnameW1, fnameW2], straylightOff=True)
     diff2 = ims2[1] - ims2[0]
     # detector as int not string so fix that
     for hdr in hdrs2:
         hdr['detector'] = str(hdr['detector'])
-    diff2 = sunpy.map.Map(diff2, hdrs2[1])
+    diff2 = sunpy.map.Map(diff2, hdrs2[1])'''
 
     # SolO Quad
     '''aPair = [[file1B, file2B, file3B, file4B], [file1A, file2A, file3A, file4A]]
@@ -190,7 +190,7 @@ else:
     diff2 = sunpy.map.Map(diff2, hdrs2[1])'''
 
     # SolO single (or anything fully prepped)
-    '''aPair = [fnameC1, fnameC2]
+    aPair = [fnameC1, fnameC2]
     with fits.open(aPair[0]) as hdulist:
         im1  = hdulist[0].data
         hdr1 = hdulist[0].header
@@ -199,7 +199,7 @@ else:
         hdr2 = hdulist[0].header
     diff2 = im2 - im1
     hdrs2 = [hdr1, hdr2]
-    diff2 = sunpy.map.Map(diff2, hdrs2[1])'''
+    diff2 = sunpy.map.Map(diff2, hdrs2[1])
 
     if len(hdrs[0]['date-obs']) > 13:
         hdrs[1]['date-obs0'] = hdrs[0]['date-obs']

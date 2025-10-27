@@ -650,8 +650,18 @@ class FigWindow(QWidget):
         
         # Convert to ra/dec
         skyres = self.OGims[self.tidx].pixel_to_world(pix[0]*u.pixel, pix[1]*u.pixel)
-        print ('Tx, Ty (arcsec):'.rjust(len(prefA)), str(int(skyres.Tx.to_value())).rjust(8), str(int(skyres.Ty.to_value())).rjust(8))
+        Tx, Ty = skyres.Tx.to_value(), skyres.Ty.to_value()
+        print ('Tx, Ty (arcsec):'.rjust(len(prefA)), str(int(Tx)).rjust(8), str(int(Ty)).rjust(8))
         
+        # Convert to proj Rsun/PA
+        Rarc = np.sqrt(Tx**2 + Ty**2)
+        Rpix = Rarc / self.satStuff[self.tidx]['SCALE']
+        if self.satStuff[self.tidx]['OBSTYPE'] == 'HI':
+            Rpix = Rpix / 3600
+        RRSun = Rpix /  self.satStuff[self.tidx]['ONERSUN']
+        # PA define w/ N as 0 and E (left) as 90
+        PA = (np.arctan2(-Tx,Ty) * 180 / np.pi) % 360.
+        print ('Proj R (Rs), PA (deg):'.rjust(len(prefA)), '{:8.2f}'.format(RRSun), '{:8.1f}'.format(PA))
         
     #|------------------------------| 
     #|----------- Others -----------|
@@ -672,7 +682,7 @@ class FigWindow(QWidget):
                 pos = []
                 obs = self.satStuff[self.tidx]['POS']
                 obsScl = [self.satStuff[self.tidx]['SCALE'], self.satStuff[self.tidx]['SCALE']]
-                if 'HI' in self.satStuff[self.tidx]['INST']:
+                if self.satStuff[self.tidx]['OBSTYPE'] == 'HI':
                     obsScl = [self.satStuff[self.tidx]['SCALE'] * 3600, self.satStuff[self.tidx]['SCALE'] * 3600]
                 cent = self.satStuff[self.tidx]['SUNPIX']
                 if 'OCCRARC' in self.satStuff[self.tidx]:
