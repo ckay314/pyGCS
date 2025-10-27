@@ -42,7 +42,7 @@ endT   = '2023/03/04T16:00'
 
 # File name that will hold the list of processed observations
 # that we can use to reload WB quicker
-outFile = 'WBobs.txt'
+outFile = 'WBobslist.txt'
 
 
 # Difference mode - option to save as base or running diff or just keep as is
