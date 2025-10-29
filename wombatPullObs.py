@@ -3,12 +3,13 @@ import astropy.units as u
 import numpy as np
 import wget
 from sunpy.time import parse_time
-
+from astropy.io import fits
+import os
 
 obsFiles = '/Users/kaycd1/wombat/obsFiles/'
 
-startT = '2023/03/04T12:00'
-endT   = '2023/03/04T16:00'
+startT = '2012/07/12T16:00'
+endT   = '2012/07/12T22:00'
 
 # AIA setup
 doAIA = False
@@ -22,8 +23,8 @@ LASCOtime = 20 # resolution to download in minutes
 
 # SECCHI setup
 doSECCHI = True
-whichSECCHI = ['EUVI', 'COR1', 'COR2',  'HI1', 'HI2'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
-EUVIwav     = [195] # Select from 171, 195, 284, 304
+whichSECCHI = ['COR2'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
+EUVIwav     = [171] # Select from 171, 195, 284, 304
 EUVItime    = 20 # resolution to download in minutes 
 CORtime     = 20 # resolution to download in minutes 
 
@@ -33,7 +34,7 @@ doSoloHI = False
 # WISPR setup
 doWISPR = False
 whichWISPR = ['In', 'Out'] # options of 'In' and 'Out
-
+WISPRtime = 30
 
 # |---------------------------------|
 # |----- Set up the time range -----|
@@ -59,7 +60,7 @@ if doAIA:
         # fileids have format 'aia__lev1:1700:1457020818:1457020818'
         # seems like all level 1 so don't need to filter
         if len(result) > 0:
-            print('Dowloading AIA files...')
+            print('Downloading AIA files...')
             downloaded_files = Fido.fetch(result[0,:], path=obsFiles+'AIA/{file}') 
         
 
@@ -85,12 +86,12 @@ if doLASCO:
             
     if 'C2' in whichLASCO:
         if len(whichC[0]):
-            print('Dowloading LASCO C2 files...')
+            print('Downloading LASCO C2 files...')
             for i in range(len(whichC[0])):
                 downloaded_files = Fido.fetch(result[0,whichC[0][i]], path=obsFiles + 'LASCO/' + ymdts[0][i] + '_C2_{file}') 
     if 'C3' in whichLASCO:
         if len(whichC[1]):
-            print('Dowloading LASCO C3 files...')
+            print('Downloading LASCO C3 files...')
             for i in range(len(whichC[1])):
                 downloaded_files = Fido.fetch(result[0,whichC[1][i]], path=obsFiles + 'LASCO/' + ymdts[1][i] + '_C3_{file}') 
 
@@ -108,16 +109,37 @@ if doSECCHI:
     # Start pulling EUVI if needed
     if 'EUVI' in whichSECCHI:
         wavidx = [[] for i in range(len(EUVIwav))]
-        for i in range(len(EUVIwav)):
-            wavidx[i]=np.where(result[0]['Wavelength'][:,0] == EUVIwav[i]*u.AA)[0]
-            # Manually downselect 
-            fullN = len(wavidx[i])
-            expN  = timeRange / EUVItime
-            if fullN > expN:
-                downN = int(fullN / expN)
-                wavidx[i] = wavidx[i][::downN]
+        
+        # Sometimes Fido decides to give no wavelengths for EUVI so have to work around
+        # Test if all entries have two values, the EUVI none flags will trip this
+        waveIssue = False
+        try:
+            temp = np.where(result[0]['Wavelength'][:,0] == EUVIwav[0]*u.AA)[0]
+        except:
+            waveIssue = True
+            print("Fido has decided not to provide EUVI wavelengths so have to download them all")
+        if not waveIssue:
+            for i in range(len(EUVIwav)):
+                wavidx[i]=np.where(result[0]['Wavelength'][:,0] == EUVIwav[i]*u.AA)[0]
+                # Manually downselect 
+                fullN = len(wavidx[i])
+                expN  = timeRange / EUVItime
+                if fullN > expN:
+                    downN = int(fullN / expN)
+                    wavidx[i] = wavidx[i][::downN]
+        else:
+            wavidx = []
+            for i in range(len(result[0]['fileid'])):
+                if ('/euvi/' in result[0]['fileid'][i]) & ('_n7eu' not in result[0]['fileid'][i]):
+                    wavidx.append(i)       
+                    
+            # Downselect because Fido will def lag with too many    
+            # There's no good way of picking which ones we keep    
+            nCrit = 30
+            if len(wavidx) > nCrit:  
+                downSel = int(len(wavidx) / nCrit)
+                wavidx = wavidx[::downSel]
     
-    result = Fido.search(a.Time(startT, endT), a.Instrument.secchi)
     whichC = [[], [], [], []]    
     for i in range(len(result[0]['fileid'])):
         if '/cor1/' in result[0]['fileid'][i]:
@@ -128,8 +150,10 @@ if doSECCHI:
             whichC[2].append(i)
         elif '/hi_2/' in result[0]['fileid'][i]:
             whichC[3].append(i)
-    
+
     # Need to filter COR1 but keep full pB series
+    # the series will have s4c1 tags early that 
+    # at some point in switch to n4c1 
     whichC[0] = whichC[0][2:]
     nTimes = len(whichC[0]) / 3
     if nTimes - int(nTimes) != 0:
@@ -148,43 +172,59 @@ if doSECCHI:
            full[3*i: 3*(i+1)]= [idx, idx+1, idx+2]
        whichC[0] = full
     
-    # Attempt to filter out COR2 pB images based on time
-    # pB are in triplets around 08:00
-    # totB are at 07:30, 23:30, 38:30, 53:30 but 7:30 is low res (at least via Fido)
+    # Filter out pB images based on file tags
+    # d4c tag is totB, n4c is pB and skipping those (for now at least)
     justTot = []
     for idx in whichC[1]:
-        if str(result[0]['Start Time'][idx])[14:19] in ['23:30', '38:30', '53:30']:
-            justTot.append(idx)
+        # d4c tag is totB, n4c is pB and skipping those (for now at least)
+        # Also only want to pull the ~8 mb images
+        if ('d4c' in result[0]['fileid'][idx]) & (result[0]['Size'][idx].to_value() > 4.):
+            if len(justTot) == 0:
+                justTot.append(idx)
+            else:
+                if (result[0]['Start Time'][idx] - result[0]['Start Time'][justTot[-1]]).to(u.min).to_value() >= CORtime:
+                     justTot.append(idx)
     whichC[1] = justTot    
     
-   
     # Do the DLs        
     if 'EUVI' in whichSECCHI:
-        for i in range(len(wavidx)):
-            idxs = wavidx[i]
-            #print (result[0,idxs])
-            if len(idxs) > 0:
-                print('Dowloading STEREO EUVI ' + str(EUVIwav[i]) + ' files...')
-                downloaded_files = Fido.fetch(result[0,idxs], path=obsFiles + 'SECCHI/EUVI_' + str(EUVIwav[i]) + 'a_{file}')          
+        if not waveIssue:
+            for i in range(len(wavidx)):
+                idxs = wavidx[i]
+                if len(idxs) > 0:
+                    print('Downloading STEREO EUVI ' + str(EUVIwav[i]) + ' files...')
+                    downloaded_files = Fido.fetch(result[0,idxs], path=obsFiles + 'SECCHI/EUVI_' + str(EUVIwav[i]) + 'a_{file}')
+        else:
+            if len(wavidx)>0:
+                print('Downloading Mystery STEREO EUVI files...')
+                downloaded_files = Fido.fetch(result[0,wavidx], path=obsFiles + 'SECCHI/EUVI_UNKa_{file}')
+                for aF in downloaded_files:
+                    with fits.open(aF) as hdulist:
+                        im  = hdulist[0].data
+                        hdr = hdulist[0].header
+                        newName = aF.replace('UNK',str(hdr['WAVELNTH']))
+                        print(aF, 'has wavelength ', str(hdr['WAVELNTH']))
+                        os.replace(aF,newName)
+                
     if 'COR1' in whichSECCHI:
         #print(result[0,whichC[0]])
         if len(whichC[0]) > 0:
-            print('Dowloading STEREO COR1 files...')
+            print('Downloading STEREO COR1 files...')
             downloaded_files = Fido.fetch(result[0,whichC[0]], path=obsFiles+'SECCHI/COR1_{file}') 
     if 'COR2' in whichSECCHI:
         #print(result[0,whichC[1]])
         if len(whichC[0]) > 0:
-            print('Dowloading STEREO COR2 files...')
+            print('Downloading STEREO COR2 files...')
             downloaded_files = Fido.fetch(result[0,whichC[1]], path=obsFiles+'SECCHI/COR2_{file}') 
     if 'HI1' in whichSECCHI:
         #print(result[0,whichC[2]])
         if len(whichC[0]) > 0:
-            print('Dowloading STEREO HI1 files...')
+            print('Downloading STEREO HI1 files...')
             downloaded_files = Fido.fetch(result[0,whichC[2]], path=obsFiles+'SECCHI/HI1_{file}') 
     if 'HI2' in whichSECCHI:
         #print(result[0,whichC[3]])
         if len(whichC[0]) > 0:
-            print('Dowloading STEREO HI2 files...')
+            print('Downloading STEREO HI2 files...')
             downloaded_files = Fido.fetch(result[0,whichC[3]], path=obsFiles+'SECCHI/HI2_{file}') 
                 
 # |----------------------------|
@@ -205,7 +245,7 @@ if doSoloHI:
     # followed by YYYYMMDD/samefilename.fits
     basePath = 'https://solohi.nrl.navy.mil/so_data/L2/'
     if len(goodIdx) > 0:
-        print('Dowloading SoloHI files...')
+        print('Downloading SoloHI files...')
         for i in goodIdx:
             ogname = result[result.keys()[0]]['fileid'][i]
             fname = ogname[ogname.rfind('/')+1:]
@@ -235,14 +275,47 @@ if doWISPR:
     # followed by YYYYMMDD/samefilename.fits
     basePath  = 'https://wispr.nrl.navy.mil/data/rel/fits/L2/'
     if len(goodIdx) > 0:
-        print('Dowloading PSP WISPR files...')
+        print('')
+        print('Downloading PSP WISPR files...')
+        #print (len(goodIdx), ' files')
+        
+        if type(WISPRtime) == type(None):
+            WISPRtime = 1 # set at min of one minute res, should grab all
+        lastTime = [[],[]]
+        
         for i in goodIdx:
             ogname = result[result.keys()[0]]['fileid'][i]
             fname = ogname[ogname.rfind('/')+1:]
             ymd = fname[13:21]
             myPath = basePath + ymd + '/' + fname
             if ('V1_1' in fname) & ('In' in whichWISPR):
-                temp = wget.download(myPath, out=obsFiles+'WISPR/')
+                if len(lastTime[0]) == 0:
+                    if os.path.exists(obsFiles+'WISPR/'+fname):
+                        os.remove(obsFiles+'WISPR/'+fname)
+                    temp = wget.download(myPath, out=obsFiles+'WISPR/')
+                    lastTime[0].append(i)
+                else:
+                    if (result[0]['Start Time'][i] - result[0]['Start Time'][lastTime[0][-1]]).to(u.min).to_value() >= WISPRtime:
+                        if os.path.exists(obsFiles+'WISPR/'+fname):
+                            os.remove(obsFiles+'WISPR/'+fname)
+                        temp = wget.download(myPath, out=obsFiles+'WISPR/'+fname)
+                        print ('')
+                        lastTime[0].append(i)
+                    else:
+                        print ('Skipping ', result[0]['Start Time'][i])
             elif ('V1_2' in fname) & ('Out' in whichWISPR):
-                temp = wget.download(myPath, out=obsFiles+'WISPR/')
+                if len(lastTime[1]) == 0:
+                    if os.path.exists(obsFiles+'WISPR/'+fname):
+                        os.remove(obsFiles+'WISPR/'+fname)
+                    temp = wget.download(myPath, out=obsFiles+'WISPR/')
+                    lastTime[1].append(i)
+                else:
+                    if (result[0]['Start Time'][i] - result[0]['Start Time'][lastTime[1][-1]]).to(u.min).to_value() >= WISPRtime:
+                        if os.path.exists(obsFiles+'WISPR/'+fname):
+                            os.remove(obsFiles+'WISPR/'+fname)
+                        temp = wget.download(myPath, out=obsFiles+'WISPR/'+fname)
+                        print ('')
+                        lastTime[1].append(i)
+                    else:
+                        print ('Skipping ', result[0]['Start Time'][i])
             

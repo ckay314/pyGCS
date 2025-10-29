@@ -8,6 +8,8 @@ import wombatWF as wf
 import pyqtgraph as pg
 from sunpy.visualization.colormaps import color_tables
 
+import datetime
+from itertools import pairwise
 
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
@@ -36,17 +38,24 @@ slogger.setLevel(logging.ERROR)
 global occultDict, WFname2id
 # Nominal radii (in Rs) for the occulters for each instrument. Pulled from google so 
 # generally correct (hopefully) but not the most precise
-occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.1,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215], 'STEREO_SECCHI_EUVI':[0,1.7],'SDO_AIA':[0,1.3]} 
+occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.1,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215], 'STEREO_SECCHI_EUVI':[0,1.7],'SDO_AIA':[0,1.35]} 
 WFname2id = {'GCS':1, 'Torus':2, 'Sphere':3, 'Half Sphere':4, 'Ellipse':5, 'Half Ellipse':6, 'Slab':7}
 
         
 class ParamWindow(QMainWindow):
-    def __init__(self, nTabs):
+    def __init__(self, nTabs, tlabs=None):
         super().__init__()
         if nTabs > 10:
             sys.exit('Do you really need to fit >10 wireframes at once? If so figure out where the upper limit of 10 is hardcoded in the ParamWindow class in wombatGUI.py')
-            
         self.nTabs = nTabs
+        
+        if type(tlabs) != type(None):    
+            self.nTsli = len(tlabs) - 1 # slider goes 0 to val so subtract 1
+            self.tlabs = tlabs
+        else:
+            self.nTsli = 0 # random number to make it happy
+            self.tlabs = ['']
+            
         self.setWindowTitle('Wombat Parameters')
         self.setGeometry(100, 100, 300, 950)
         self.setFixedSize(300, 950) 
@@ -97,13 +106,20 @@ class ParamWindow(QMainWindow):
         layout.addWidget(label, 0,0,40,11,alignment=QtCore.Qt.AlignCenter)
         
         # Time slider/label
-        Tlabel = QLabel('Time selection ')
-        layout.addWidget(Tlabel,0,0,1,10,alignment=QtCore.Qt.AlignCenter)
+        if self.nTsli > 0:
+            Tlabel = QLabel('Time selection: '+self.tlabs[0])
+        else:
+            Tlabel = QLabel('Single Time Given')
+        self.Tlabel = Tlabel
+        layout.addWidget(Tlabel,0,0,1,10,alignment=QtCore.Qt.AlignLeft)
         
         slider1 = QSlider()
         #slider1.setGeometry(QtCore.QRect(0, 100, 160, 25))
         slider1.setOrientation(QtCore.Qt.Horizontal)
+        slider1.setRange(0,self.nTsli)
+        slider1.valueChanged.connect(self.update_tidx)
         layout.addWidget(slider1, 1,0,1,11)
+
 
         label = QLabel('Wireframe Type')
         layout.addWidget(label, 2,0,1,11,alignment=QtCore.Qt.AlignCenter)
@@ -371,7 +387,13 @@ class ParamWindow(QMainWindow):
     def back_changed(self,text):
         for aPW in pws:
              aPW.cbox.setCurrentIndex(text)         
-            
+    
+    def update_tidx(self, value):
+        self.Tlabel.setText('Time selection: '+self.tlabs[value])
+        for aPW in pws:
+            aPW.tidx = aPW.st2obs[value]
+            aPW.plotBackground()     
+    
     def EBclicked(self):
         sys.exit()
 
@@ -496,7 +518,7 @@ class ParamWindow(QMainWindow):
     
         
 class FigWindow(QWidget):
-    def __init__(self, satName, myObs, myScls, satStuff, myNum=0, labelPW=True):
+    def __init__(self, satName, myObs, myScls, satStuff, myNum=0, labelPW=True, tmap=[0]):
         super().__init__()
         # Obs are [[ims], [hdrs]] as passed to the GUI (prob MSB)
         # Scls are [[lin, log, sqrt]] on -100,100 range
@@ -514,6 +536,7 @@ class FigWindow(QWidget):
         self.myScls2 = myScls
         self.tidx = 0
         self.sclidx = 0
+        self.st2obs = tmap # slider time to obs index
 
         layoutP =  QGridLayout()
         
@@ -527,7 +550,7 @@ class FigWindow(QWidget):
 
         hasCT = check4CT(satStuff[0])
         if type(hasCT) != type(None):
-            self.image.setLookupTable(hasCT)
+             self.image.setLookupTable(hasCT)
         
         self.pWindow.addItem(self.image)
         
@@ -646,12 +669,12 @@ class FigWindow(QWidget):
         view_pos = self.pWindow.plotItem.vb.mapSceneToView(scene_pos)
         pix = [view_pos.x(), view_pos.y()]
         prefA = self.satStuff[self.tidx]['MYTAG'] + ' pix:'
-        print (prefA, str(int(pix[0])).rjust(8), str(int(pix[1])).rjust(8))
+        print (prefA.rjust(25), str(int(pix[0])).rjust(8), str(int(pix[1])).rjust(8))
         
         # Convert to ra/dec
         skyres = self.OGims[self.tidx].pixel_to_world(pix[0]*u.pixel, pix[1]*u.pixel)
         Tx, Ty = skyres.Tx.to_value(), skyres.Ty.to_value()
-        print ('Tx, Ty (arcsec):'.rjust(len(prefA)), str(int(Tx)).rjust(8), str(int(Ty)).rjust(8))
+        print ('Tx, Ty (arcsec):'.rjust(25), str(int(Tx)).rjust(8), str(int(Ty)).rjust(8))
         
         # Convert to proj Rsun/PA
         Rarc = np.sqrt(Tx**2 + Ty**2)
@@ -661,7 +684,8 @@ class FigWindow(QWidget):
         RRSun = Rpix /  self.satStuff[self.tidx]['ONERSUN']
         # PA define w/ N as 0 and E (left) as 90
         PA = (np.arctan2(-Tx,Ty) * 180 / np.pi) % 360.
-        print ('Proj R (Rs), PA (deg):'.rjust(len(prefA)), '{:8.2f}'.format(RRSun), '{:8.1f}'.format(PA))
+        print ('Proj R (Rs), PA (deg):'.rjust(25), '{:8.2f}'.format(RRSun), '{:8.1f}'.format(PA))
+        print ('')
         
     #|------------------------------| 
     #|----------- Others -----------|
@@ -847,23 +871,34 @@ def makeNiceMMs(imIn, hdr, satStuff):
     imNonNaN = im[~np.isnan(im)]
     medval  = np.median(np.abs(imNonNaN))
     
+    # Get the median negative value to comp to the median abs
+    # value. If neg med big enough assume that is diff image
+    negmed  = np.abs(np.median(imNonNaN[np.where(imNonNaN < 0)]))
+    diffImg = False
+    if (negmed / medval) > 0.25: # guessing at cutoff of 25%, might tune
+        diffImg = True
+    
+    
     myInst = satStuff['INST']
     # mins/maxs on percentiles by instrument [[lower], [upper]] with [lin, log, sqrt]
-    pMMs = {'AIA':[[0.001,10,1], [99,99,99]], 'SECCHI_EUVI':[[0.001,10,1], [99,99,99]], 'LASCO_C2':[[15,1,15], [97,99,97]], 'LASCO_C3':[[40,1,10], [99,99,90]], 'SECCHI_COR1':[[20,1,10], [90,99,90]], 'SECCHI_COR2':[[20,1,10], [90,99,90]], 'WISPR_HI1':[[1,40,1], [99.9,80,99.9]], 'WISPR_HI2':[[1,40,1], [99.9,80,99.9]], 'SoloHI':[[1,40,1], [99.5,80,99.5]] }
+    pMMs = {'AIA':[[0.001,10,1], [99,99,99]], 'SECCHI_EUVI':[[0.001,10,1], [99,99,99]], 'LASCO_C2':[[15,1,15], [97,99,97]], 'LASCO_C3':[[40,1,10], [99,99,90]], 'SECCHI_COR1':[[20,1,10], [90,99,90]], 'SECCHI_COR2':[[20,1,10], [90,99,92]], 'SECCHI_HI1':[[1,40,1], [99.9,80,99.9]], 'SECCHI_HI2':[[1,40,1],[99.9,80,99.9]], 'WISPR_HI1':[[1,40,1], [99.9,80,99.9]], 'WISPR_HI2':[[1,40,1], [99.9,80,99.9]], 'SoloHI':[[1,40,1], [99.5,80,99.5]] }
     
-    sliVals = {'AIA':[[0,0,0], [191,191,191]], 'SECCHI_EUVI':[[0,32,0], [191,191,191]], 'LASCO_C2':[[0,0,21],[191,191,191]], 'LASCO_C3':[[37,0,37],[191,191,191]], 'SECCHI_COR1':[[0,0,21],[128,191,191]], 'SECCHI_COR2':[[0,0,21],[128,191,191]], 'WISPR_HI1':[[0,0,21],[128,191,191]], 'WISPR_HI2':[[0,0,21],[128,191,191]], 'SoloHI':[[0,0,21],[128,191,191]]}
+    sliVals = {'AIA':[[0,0,0], [191,191,191]], 'SECCHI_EUVI':[[0,32,0], [191,191,191]], 'LASCO_C2':[[0,0,21],[191,191,191]], 'LASCO_C3':[[37,0,37],[191,191,191]], 'SECCHI_COR1':[[0,0,21],[128,191,191]], 'SECCHI_COR2':[[63,0,21],[191,191,191]], 'SECCHI_HI1':[[0,0,21],[128,191,191]], 'SECCHI_HI2':[[0,0,21],[128,191,191]],  'WISPR_HI1':[[0,0,21],[128,191,191]], 'WISPR_HI2':[[0,0,21],[128,191,191]], 'SoloHI':[[0,0,21],[128,191,191]]}
     
-    #pMMs = {'EUV':[[0.001,10,1], [99,99,99]], 'COR':[[20,1,10], [90,99,90]], 'HI':[[1,1,1], [99.9,99,99]]}
-    #sliVals = {'EUV':[[0,0,0], [191,191,191]], 'COR':[[0,0,21],[128,191,191]], 'HI':[[1,1,1], [99.9,99,99]]}
     myMM = pMMs[myInst]
     mySliVals = sliVals[myInst]
     satStuff['SLIVALS'] = mySliVals
     
     # remove the nans
-    im[np.isnan(im)] = 0
+    if not diffImg:
+        im[np.isnan(im)] = 0
+    else:
+        im[np.isnan(im)] = -9999
     
     # Linear Image
     linMin, linMax = np.percentile(imNonNaN, myMM[0][0]), np.percentile(imNonNaN, myMM[1][0])  
+    if diffImg:
+        linMin = - 0.5*linMax
     rng = linMax- linMin
     linIm = (im - linMin) * 255 / rng
     
@@ -907,8 +942,8 @@ def getSatStuff(imMap, diffDate=None):
     # PSP format
     if myhdr['obsrvtry'] == 'Parker Solar Probe':
         satDict['OBS'] =  myhdr['obsrvtry']
-        satDict['INST'] =  myhdr['instrume'] + '_HI' + myhdr['detector']
-        myTag   = myhdr['obsrvtry'] + '_' + myhdr['instrume'] + '_HI' + myhdr['detector']
+        satDict['INST'] =  myhdr['instrume'] + '_HI' + str(myhdr['detector'])
+        myTag   = myhdr['obsrvtry'] + '_' + myhdr['instrume'] + '_HI' + str(myhdr['detector'])
     # SolO format
     elif myhdr['obsrvtry'] == 'Solar Orbiter':
         satDict['OBS'] =  myhdr['obsrvtry']
@@ -935,7 +970,7 @@ def getSatStuff(imMap, diffDate=None):
     elif satDict['OBS'] in ['STEREO_A', 'STEREO_B']:
         if myhdr['detector'] in ['COR1', 'COR2']:
             satDict['OBSTYPE'] = 'COR'
-        elif myhdr['instrume'] in ['HI1', 'HI2']:
+        elif myhdr['detector'] in ['HI1', 'HI2']:
             satDict['OBSTYPE'] = 'HI'
         else:
             satDict['OBSTYPE'] = 'EUV'
@@ -1027,7 +1062,7 @@ def getSatStuff(imMap, diffDate=None):
     # Actually make the mask
     mask = np.zeros(imMap.data.shape)
     # Check that not SolO/PSP or STEREO HI
-    if ('HI' not in imMap.meta['detector']) & (imMap.meta['obsrvtry'] not in ['Parker Solar Probe', 'Solar Orbiter']):   
+    if (satDict['OBSTYPE'] != 'HI'):   
         myOccR  = occultDict[myTag][0] # radius of the occulter in Rs
         occRpix = int(myOccR * oners)
         satDict['OCCRPIX'] = myOccR * oners
@@ -1174,12 +1209,81 @@ def reloadIt(rD):
         pws[i].MinSlider.setValue(myMin)
         pws[i].MaxSlider.setValue(myMax)
     
+def sortTimeIndices(satStuff, tRes=20):
+    # Set a default range of 20 minutes
+    
+    #nPerObs = []
+    #for aSat in satStuff: # refrained from using aSS instead of aSat. mostly
+    #    nPerObs.append(len(aSat))
+    #maxTimes = np.max(nTimes)
+    #whoMost  = np.where(np.array(nTimes) == maxTimes)[0][0]
+    # get the min/max for each, might need to change max times if wildly diff
+    
+    allTimes = []
+    allMins  = []
+    allMaxs  = []
+    for j in range(len(satStuff)):
+        aSat = satStuff[j]
+        myTimes = []
+        for i in range(len(aSat)):
+            myTimes.append(datetime.datetime.strptime(aSat[i]['DATEOBS'], "%Y-%m-%dT%H:%M:%S"))
+            
+        # Check if sorted
+        if not all(a <= b for a, b in pairwise(myTimes)):
+            sys.exit('Exiting from sortTimeIndices, files should be provided in time order')
+        
+        allMins.append(myTimes[0])
+        allMaxs.append(myTimes[-1])
+        allTimes.append(np.array(myTimes))
+        
+    # check that times are actually overlapping, probably not entirely necessary
+    # but want to make sure aren't passed wildly separate times that will turn the
+    # time slider into chaos
+    for i in range(len(allMins)):
+        for j in range(len(allMins)-1):
+            if allMaxs[i] < allMins[j+1]:
+                sys.exit('Exiting from sortTimeIndices, observation times should be overlapping')
+    
+    totMin = np.min(allMins)
+    totMax = np.max(allMaxs)
+    totRng = (totMax - totMin).total_seconds() / 60.
+    
+    # Determine the number of slider points based on the range and resolution
+    nTimes = int(totRng / tRes)+2
+    
+    # Make a datetime array for the slider times
+    DTgeneral = []
+    overMin = totMin.minute % tRes
+    genDT0  = (totMin - datetime.timedelta(minutes=overMin)).replace(second=0, microsecond=0) 
+    tlabs = []
+    for i in range(nTimes):
+        DTgeneral.append(genDT0 + datetime.timedelta(minutes=(i*tRes)))
+        tstr = DTgeneral[-1].strftime("%Y-%m-%dT%H:%M")
+        tlabs.append(tstr)
+    DTgeneral = np.array(DTgeneral)
+    tlabs = np.array(tlabs)
+    
+    # Find the closest match between slider and obs times
+    tmaps = []
+    for j in range(len(satStuff)):
+        myTimes = allTimes[j]
+        st2obs  = np.zeros(nTimes, dtype=int)
+        for i in range(nTimes):
+            myDTdiff = np.abs(myTimes-DTgeneral[i])
+            mygenidx = np.where(myDTdiff == np.min(myDTdiff))[0]
+            st2obs[i] = mygenidx[0]
+        
+        tmaps.append(st2obs)
+  
+    return nTimes, tlabs, tmaps
+
 def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadDict=None):
     
     global mainwindow, pws, nSats, wfs, nwfs, bmodes, ovw
     
     # obsFiles should have 1 array for each satellite
     nSats = len(obsFiles)
+
     # each sat array then [[ims], [hdrs]]
     if type(reloadDict) != type(None):
         nwfs = reloadDict['nWFs']
@@ -1190,10 +1294,14 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
     # Find the min/max for each type of plot range
     sclIms = []    
     satStuff = []
+    multiTime = False
     for i in range(nSats):
         satScls = []
         someStuff = []
-        for j in range(len(obsFiles[i][0])):
+        tNum = len(obsFiles[i][0])
+        if tNum > 1:
+            multiTime = True
+        for j in range(tNum): 
             mySatStuff = getSatStuff(obsFiles[i][0][j], diffDate=obsFiles[i][1][j]['DATE-OBS0'])
             sclIm, mySatStuff = makeNiceMMs(obsFiles[i][0][j], obsFiles[i][1][j], mySatStuff)
             # Check if it made a mask and just use it now if so
@@ -1207,9 +1315,16 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
                     #sclIm[k][sy,sx] = 200
             satScls.append(sclIm)
             someStuff.append(mySatStuff)
-            
+                        
         sclIms.append(satScls)
         satStuff.append(someStuff)
+    
+    if multiTime:
+        nTsli, tlabs, tmaps = sortTimeIndices(satStuff)
+    else:
+        nTsli = 0
+        tlabs = None
+    
     
     # Get the max FoV from the satStuff so we can adjust height slider appropriately
     maxFoV = 0
@@ -1231,7 +1346,11 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
     # Launch obs windows
     pws = []
     for i in range(nSats):
-        pw = FigWindow('Sat1', obsFiles[i], sclIms[i], satStuff[i], myNum=i, labelPW=labelPW)
+        if multiTime:
+            myTmap = tmaps[i]
+        else:
+            myTmap = [0]
+        pw = FigWindow('Sat1', obsFiles[i], sclIms[i], satStuff[i], myNum=i, labelPW=labelPW, tmap=myTmap)
         pw.show()
         pws.append(pw) 
     
@@ -1244,7 +1363,7 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
     
     
     # Launch the parameter panel    
-    mainwindow = ParamWindow(nwfs)
+    mainwindow = ParamWindow(nwfs, tlabs=tlabs)
     mainwindow.show()
     
     # Set to values from reload file if passed

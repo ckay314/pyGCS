@@ -34,8 +34,16 @@ proFiles = '/Users/kaycd1/wombat/wbfits/'
 
 
 # Start and end time of the period of interest
-startT = '2023/03/04T12:00'
-endT   = '2023/03/04T16:00'
+startT = '2012/07/12T16:00'
+endT   = '2012/07/12T22:00'
+#startT = '2023/10/24T16:00'
+#endT   = '2023/10/24T22:00'
+
+#startT = '2023/09/24T16:00'
+#endT   = '2023/09/24T22:00'
+
+#startT = '2023/03/04T12:00'
+#endT   = '2023/03/04T16:00'
 
 #startT = '2023/12/31T22:00'
 #endT   = '2024/01/01T02:00'
@@ -51,24 +59,24 @@ outFile = 'WBobslist.txt'
 
 # AIA setup
 doAIA = True
-AIAwav = [171,193, 304] # Select from 94, 131, 171*, 193*, 211, 304*, 335, 1600, 1700 (* most common)
+AIAwav = [171,193] # Select from 94, 131, 171*, 193*, 211, 304*, 335, 1600, 1700 (* most common)
 
 # LASCO setup
-doLASCO = True
+doLASCO = False
 whichLASCO = ['C2', 'C3'] # Select from 'C2' and 'C3'
 
 # SECCHI setup
-doSECCHI = True
+doSECCHI = False
 #whichSECCHI = ['EUVI', 'COR1', 'COR2',  'HI1', 'HI2'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
-whichSECCHI = ['EUVI','COR1', 'COR2',  'HI1', 'HI2'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
-EUVIwav     = [195, 171] # Select from 171, 195, 284, 304
+whichSECCHI = ['EUVI'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
+EUVIwav     = [171] # Select from 171, 195, 284, 304
 
 # SoloHI setup
-doSoloHI = True
-whichSoloHI = ['Single'] # options of 'Quad' or 'Single'
+doSoloHI = False
+whichSoloHI = ['Quad'] # options of 'Quad' or 'Single'
 
 # WISPR setup
-doWISPR = True
+doWISPR = False
 whichWISPR = ['In', 'Out'] # options of 'In' and 'Out
 
 
@@ -131,12 +139,16 @@ if doAIA:
     nWav = len(AIAwav)
     goodFiles = [[] for i in range(nWav)]
     for aF in AIAfiles:
+        aF = aF.lower()
+        # Some times AIA has . instead of _ for no apparent reason
+        if aF.count('.') > 1:
+            print(aF[:-4])
         if singleDay:
             if AIAdatestrs[0] in aF:
                 hm = aF[25:30]
                 if (hm >= hm0) & (hm <= hmf):
                     for i in range(nWav):
-                        if '_'+str(AIAwav[i])+'a_' in aF:
+                        if str(AIAwav[i])+'a_' in aF:
                             goodFiles[i].append(obsFiles+'AIA/'+aF)
         else:
             for j in range(nDays):
@@ -159,14 +171,14 @@ if doAIA:
         goodFiles[i] = np.sort(np.array(goodFiles[i]))
         ims = aia_prep(goodFiles[i])
         for k in range(len(ims)):
-            print ('On file '+str(i+1)+' out of '+str(len(ims)))
+            print ('On file '+str(k+1)+' out of '+str(len(ims)))
             im = ims[k]
             # Add extra keywords wombat wants
             im.meta['OBSRVTRY'] = 'SDO'
             im.meta['DETECTOR'] = 'AIA'
             im.meta['SC_ROLL'] = 0.
             # Set up output filename
-            ymd = im.meta['DATE'].replace('-','').replace(':','')
+            ymd = im.meta['DATE-OBS'].replace('-','').replace(':','')[:15]  
             fitsName = 'wbpro_aia'+str(AIAwav[i])+'_'+ymd+'.fits'
             # Save the fits file
             im.save(proFiles+fitsName, overwrite=True)
@@ -225,6 +237,7 @@ if doLASCO:
         for i in range(len(imsc2)):
             ymd = hdrsc2[i]['DATE-OBS'].replace('/','')+'T'+hdrsc2[i]['TIME-OBS'].replace(':','')[:6]
             fitsName = 'wbpro_lascoC2'+'_'+ymd+'.fits'
+            hdrsc2[i]['OBSRVTRY'] = 'SOHO'
             fits.writeto(proFiles+fitsName, imsc2[i], hdrsc2[i], overwrite=True)
             f1.write(proFiles+fitsName+'\n')
     if 'C3' in whichLASCO:
@@ -234,6 +247,7 @@ if doLASCO:
         for i in range(len(imsc3)):
             ymd = hdrsc3[i]['DATE-OBS'].replace('/','')+'T'+hdrsc3[i]['TIME-OBS'].replace(':','')[:6]
             fitsName = 'wbpro_lascoC3'+'_'+ymd+'.fits'
+            hdrsc3[i]['OBSRVTRY'] = 'SOHO'
             fits.writeto(proFiles+fitsName, imsc3[i], hdrsc3[i], overwrite=True)
             f1.write(proFiles+fitsName+'\n')
             
@@ -263,14 +277,15 @@ if doSECCHI:
                 else:
                     stidx = aF.find('_')
                 hm = aF[stidx+10:stidx+14]
+                satKey = aF[-5].lower()
                 if (hm >= hm0) & (hm <= hmf):
                     whichInst = pre2ind[aF[:4]]
                     if whichInst != 0:
-                        goodFiles[aF[-5]][whichInst].append(obsFiles+'SECCHI/'+aF)
+                        goodFiles[satKey][whichInst].append(obsFiles+'SECCHI/'+aF)
                     else:
                         for k in range(len(EUVIwav)):
                             if (str(EUVIwav[k])+'a') in aF:
-                                goodFiles[aF[-5]][0][k].append(obsFiles+'SECCHI/'+aF)
+                                goodFiles[satKey][0][k].append(obsFiles+'SECCHI/'+aF)
         else:
             for j in range(nDays):
                 if ymds[j] in aF:
@@ -288,12 +303,13 @@ if doSECCHI:
                         addIt = False
                     if addIt:
                         whichInst = pre2ind[aF[:4]]
+                        satKey = aF[-5].lower()
                         if whichInst != 0:
-                            goodFiles[aF[-5]][whichInst].append(obsFiles+'SECCHI/'+aF)
+                            goodFiles[satKey][whichInst].append(obsFiles+'SECCHI/'+aF)
                         else:
                             for k in range(len(EUVIwav)):
                                 if (str(EUVIwav[k])+'a') in aF:
-                                    goodFiles[aF[-5]][0][k].append(obsFiles+'SECCHI/'+aF)
+                                    goodFiles[satKey][0][k].append(obsFiles+'SECCHI/'+aF)
     
     for i in range(len(goodFiles['a'])):
         if i != 0:
@@ -496,7 +512,6 @@ if doSoloHI:
         prefixs = ['solo_L2_solohi-1ft_', 'solo_L2_solohi-2ft_', 'solo_L2_solohi-3fg_', 'solo_L2_solohi-4fg_']
         for i in range(4):
             for j in range(len(goodFiles[i])):
-                print (goodFiles[i])
                 thisT = parse_time(goodFiles[i][j].replace(prefixs[i],'').replace('_V01.fits','').replace('_V02.fits',''))
                 shTimes[i].append(thisT)
         # Figure out which has the most obs

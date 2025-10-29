@@ -65,10 +65,113 @@ def processReload(fileIn):
     else:
         sys.exit('Reload file not found, cannot launch')
 
-# Check if we were passe a reload file
+
+def pullProcFiles(theFile, diffMode='RD', diffEUV=False):
+    # allFH is all the fits and headers packaged into an array
+    # allFH = [[instr1], [instr2], ...]
+    # where each instr is [[data_t1, data_t2...], [hdr_t1, hdr_t2]]
+    # and the data and hdrs are assume to be sorted in time order
+    # (but will not actually fail if they are not)
+    
+    # diffMode can be RD or BD for running diff or base diff
+    
+    # Set up empty holders
+    allFH0 = []
+    names = []
+    counter = -1
+    
+    pFiles = np.genfromtxt(theFile, dtype=str)
+    for apF in pFiles:
+        if '.fits' not in apF:
+            print ('Reading in ', apF, ' files')
+            allFH0.append([[], []])
+            names.append(apF)
+            counter += 1
+        else:
+            print(' ', apF)
+            with fits.open(apF) as hdulist:
+                im  = hdulist[0].data
+                hdr = hdulist[0].header
+                
+            allFH0[counter][0].append(im)
+            allFH0[counter][1].append(hdr)
+    
+    # Convert the fits to maps and take differences
+    allFH = []
+    for i in range(len(allFH0)):
+        # Make sure it has more than one file 
+        if (len(allFH0[i][0]) > 1) or (('EUVI' in names[i]) & (not diffEUV)) or (('AIA' in names[i]) & (not diffEUV)):
+            allFH.append([[], []])
+            # EUV no diff cases
+            if (('EUVI' in names[i]) & (not diffEUV)) or (('AIA' in names[i]) & (not diffEUV)):            
+                for j in range(len(allFH0[i][0])):
+                    myData = allFH0[i][0][j]
+                    myHdr  = allFH0[i][1][j]
+                    myMap  = sunpy.map.Map(myData, myHdr)
+                    # Add date obs0 into header 
+                    myHdr['date-obs0'] = None
+                    
+                    allFH[i][0].append(myMap)
+                    allFH[i][1].append(myHdr)
+            # Any form of difference
+            else:
+                for j in range(len(allFH0[i][0])-1):
+                    # Get the data for a time step
+                    myData = allFH0[i][0][j+1]
+                    myHdr  = allFH0[i][1][j+1]
+                    # Get the 
+                    if diffMode == 'BD':
+                        myBase = allFH0[i][0][0]
+                        hdr0   = allFH0[i][1][0]
+                    else:
+                        myBase = allFH0[i][0][j]
+                        hdr0   = allFH0[i][1][j]
+                        
+                    if (myData.shape == myBase.shape):
+                        diffData = myData - myBase
+                        diffMap = sunpy.map.Map(diffData, myHdr)
+                        
+                        if len(hdr0['date-obs']) > 13:
+                            myHdr['date-obs0'] = hdr0['date-obs']
+                        else:
+                             myHdr['date-obs0'] = hdr0['date-obs'] + 'T' + hdr0['time-obs']
+                        
+                        allFH[i][0].append(diffMap)
+                        allFH[i][1].append(myHdr)
+                    else:
+                        print ('Skipping file -- mismatch in size for ' + names[i] + allFH0[i][1][j+1]['DATE-OBS'])
+            
+        else:
+            print ('Cannot make diff for '+ names[i]+ ' from only a single file')
+            
+
+    return allFH
+    
+# Check if we were passed a file
+# Could be either a reload file or a list of pre processed obs
 if len(sys.argv) > 1:
-    allFH, reloadDict = processReload(sys.argv[1])
-    releaseTheWombat(allFH,overviewPlot=True, reloadDict=reloadDict)
+    theFile = sys.argv[1]
+    
+    doReload = False
+    preProc  = False
+    
+    if 'reload' in theFile:
+        doReload = True
+    elif 'obslist' in theFile:
+        preProc = True
+    else:
+        print ('Need to determine if reload/obs, tbd')
+        
+    if doReload:    
+        allFH, reloadDict = processReload(theFile)
+    else:
+        reloadDict = None
+        
+    if preProc:
+        allFH = pullProcFiles(theFile)
+    
+
+    releaseTheWombat(allFH,overviewPlot=False, reloadDict=reloadDict)
 
     print (sd)
 
@@ -210,4 +313,4 @@ else:
     else:
          hdrs2[1]['date-obs0'] = hdrs2[0]['date-obs'] + 'T'  + hdrs2[0]['time-obs']
 
-releaseTheWombat([[[diff],[hdrs[1]]], [[diff2],[hdrs2[1]]]], nWFs=2, overviewPlot=False)
+    releaseTheWombat([[[diff],[hdrs[1]]], [[diff2],[hdrs2[1]]]], nWFs=2, overviewPlot=False)
