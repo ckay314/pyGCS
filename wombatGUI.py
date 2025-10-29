@@ -865,10 +865,32 @@ class OverviewWindow(QWidget):
         elif event.key() == QtCore.Qt.Key_Escape:
             sys.exit()
 
-def makeNiceMMs(imIn, hdr, satStuff):
-    # Transpose and get perc values ignoring the NaNs
-    im = np.transpose(imIn.data)
-    imNonNaN = im[~np.isnan(im)]
+def makeNiceMMs(obsIn, satStuffs):
+    # Dictionaries that establish the scaling of things
+    # Pull the desired values for each instrument
+    
+    # mins/maxs on percentiles by instrument [[lower], [upper]] with [lin, log, sqrt]
+    pMMs = {'AIA':[[0.001,10,1], [99,99,99]], 'SECCHI_EUVI':[[0.001,10,1], [99,99,99]], 'LASCO_C2':[[15,1,15], [97,99,97]], 'LASCO_C3':[[40,1,10], [99,99,90]], 'SECCHI_COR1':[[20,1,10], [90,99,90]], 'SECCHI_COR2':[[20,1,10], [92,99,93]], 'SECCHI_HI1':[[1,40,1], [99.9,80,99.9]], 'SECCHI_HI2':[[1,40,1],[99.9,80,99.9]], 'WISPR_HI1':[[1,40,1], [99.9,80,99.9]], 'WISPR_HI2':[[1,40,1], [99.9,80,99.9]], 'SoloHI':[[1,40,1], [99.5,80,99.5]] }
+    
+    # Where the background sliders start (between 0 and 255)
+    sliVals = {'AIA':[[0,0,0], [191,191,191]], 'SECCHI_EUVI':[[0,32,0], [191,191,191]], 'LASCO_C2':[[0,0,21],[191,191,191]], 'LASCO_C3':[[37,0,37],[191,191,191]], 'SECCHI_COR1':[[0,0,21],[128,191,191]], 'SECCHI_COR2':[[63,0,21],[191,191,191]], 'SECCHI_HI1':[[0,0,21],[128,191,191]], 'SECCHI_HI2':[[0,0,21],[128,191,191]],  'WISPR_HI1':[[0,0,21],[128,191,191]], 'WISPR_HI2':[[0,0,21],[128,191,191]], 'SoloHI':[[0,0,21],[128,191,191]]}
+    
+    # Holder for the scaled images    
+    allScls = []
+    
+    # Pull the configuration based on instrument
+    myInst = satStuffs[0]['INST']
+    myMM = pMMs[myInst]
+    mySliVals = sliVals[myInst]
+    
+    # Make an empty holder for all the data we pull out of maps
+    sz = obsIn[0][0].data.shape
+    allObs = np.zeros([len(satStuffs), sz[1], sz[0]])
+    for i in range(len(satStuffs)):
+        allObs[i,:,:] = np.transpose(obsIn[0][i].data)
+        
+    # Get overall median
+    imNonNaN = allObs[~np.isnan(allObs)]   
     medval  = np.median(np.abs(imNonNaN))
     
     # Get the median negative value to comp to the median abs
@@ -878,56 +900,59 @@ def makeNiceMMs(imIn, hdr, satStuff):
     if (negmed / medval) > 0.25: # guessing at cutoff of 25%, might tune
         diffImg = True
     
-    
-    myInst = satStuff['INST']
-    # mins/maxs on percentiles by instrument [[lower], [upper]] with [lin, log, sqrt]
-    pMMs = {'AIA':[[0.001,10,1], [99,99,99]], 'SECCHI_EUVI':[[0.001,10,1], [99,99,99]], 'LASCO_C2':[[15,1,15], [97,99,97]], 'LASCO_C3':[[40,1,10], [99,99,90]], 'SECCHI_COR1':[[20,1,10], [90,99,90]], 'SECCHI_COR2':[[20,1,10], [90,99,92]], 'SECCHI_HI1':[[1,40,1], [99.9,80,99.9]], 'SECCHI_HI2':[[1,40,1],[99.9,80,99.9]], 'WISPR_HI1':[[1,40,1], [99.9,80,99.9]], 'WISPR_HI2':[[1,40,1], [99.9,80,99.9]], 'SoloHI':[[1,40,1], [99.5,80,99.5]] }
-    
-    sliVals = {'AIA':[[0,0,0], [191,191,191]], 'SECCHI_EUVI':[[0,32,0], [191,191,191]], 'LASCO_C2':[[0,0,21],[191,191,191]], 'LASCO_C3':[[37,0,37],[191,191,191]], 'SECCHI_COR1':[[0,0,21],[128,191,191]], 'SECCHI_COR2':[[63,0,21],[191,191,191]], 'SECCHI_HI1':[[0,0,21],[128,191,191]], 'SECCHI_HI2':[[0,0,21],[128,191,191]],  'WISPR_HI1':[[0,0,21],[128,191,191]], 'WISPR_HI2':[[0,0,21],[128,191,191]], 'SoloHI':[[0,0,21],[128,191,191]]}
-    
-    myMM = pMMs[myInst]
-    mySliVals = sliVals[myInst]
-    satStuff['SLIVALS'] = mySliVals
-    
-    # remove the nans
+    # Set NaNs based on if diff or not    
     if not diffImg:
-        im[np.isnan(im)] = 0
+        allObs[np.isnan(allObs)] = 0
     else:
-        im[np.isnan(im)] = -9999
+        allObs[np.isnan(allObs)] = -9999
     
-    # Linear Image
-    linMin, linMax = np.percentile(imNonNaN, myMM[0][0]), np.percentile(imNonNaN, myMM[1][0])  
+    # Process the linear images
+    linMin, linMax = np.percentile(imNonNaN, myMM[0][0]), np.percentile(imNonNaN, myMM[1][0])      
     if diffImg:
         linMin = - 0.5*linMax
     rng = linMax- linMin
-    linIm = (im - linMin) * 255 / rng
+    linIm = (allObs - linMin) * 255 / rng
     
-    # Log im
-    tempIm = im / medval
-    minVal = np.percentile(np.abs(tempIm),myMM[0][1])
+    # Process the log image
+    tempIm = allObs / medval
+    tempNonNan = imNonNaN / medval
+    minVal = np.percentile(np.abs(tempNonNan),myMM[0][1])
     pidx = np.where(tempIm > minVal)
     nidx = np.where(tempIm < -minVal)
     logIm = np.zeros(tempIm.shape)
     logIm[np.where(np.abs(tempIm) < minVal)] = 1
     logIm[pidx] = np.log(tempIm[pidx] - minVal + 1)  
     logIm[nidx] = -np.log(-tempIm[nidx] - minVal + 1)  
-    #minLog, maxLog = np.percent(logIm, myMM[1][0]), np.percent(logIm, myMM[1][1])
-    perc95 = np.percentile(logIm, myMM[1][1])
-    logIm = 191 * logIm / perc95
+    percX = np.percentile(logIm, myMM[1][1])
+    logIm = 191 * logIm / percX
     
-    # SQRT image
-    tempIm = im / medval
-    minVal = np.percentile(tempIm,myMM[0][2])
+    # Process the sqrt image
+    tempIm = allObs / medval
+    minVal = np.percentile(tempNonNan,myMM[0][2])
     tempIm = tempIm - minVal # set minVal at zero
     tempIm[np.where(tempIm < 0)] = 0
     sqrtIm = np.sqrt(tempIm)
-    
     percX = np.percentile(sqrtIm, myMM[1][2])
     sqrtIm = 191 * sqrtIm / percX
-      
     
-    sclIms = [linIm, logIm,  sqrtIm]
-    return sclIms, satStuff
+    for i in range(len(satStuffs)):
+        # Add the slider init values to each satStuff
+        satStuffs[i]['SLIVALS'] = mySliVals
+    
+        # package the scaled images for this time step
+        sclIms = [linIm[i], logIm[i],  sqrtIm[i]]
+        
+        # Add the mask if we have one
+        if 'MASK' in satStuffs[i]:
+            midx = np.where(satStuffs[i]['MASK'] == 1)
+            for k in range(3):
+                # black out all occulted
+                sclIms[k][midx] = -100. # might need to change if adjust plot ranges
+                
+        # Append masked/scaled images to master list
+        allScls.append(sclIms)
+    return allScls, satStuffs
+
     
 def getSatStuff(imMap, diffDate=None):
     # Set up satDict as a micro header that we will package the mask in
@@ -1303,20 +1328,11 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
             multiTime = True
         for j in range(tNum): 
             mySatStuff = getSatStuff(obsFiles[i][0][j], diffDate=obsFiles[i][1][j]['DATE-OBS0'])
-            sclIm, mySatStuff = makeNiceMMs(obsFiles[i][0][j], obsFiles[i][1][j], mySatStuff)
-            # Check if it made a mask and just use it now if so
-            if 'MASK' in mySatStuff:
-                midx = np.where(mySatStuff['MASK'] == 1)
-                for k in range(len(sclIm)):
-                    # black out all occulted
-                    sclIm[k][midx] = -100. # might need to change if adjust plot ranges
-                    # assigning sun pixels instead of just drawing on it makes disjointed so do later
-                    #sx, sy = mySatStuff['SUNCIRC'][0].astype(int), mySatStuff['SUNCIRC'][1].astype(int)
-                    #sclIm[k][sy,sx] = 200
-            satScls.append(sclIm)
             someStuff.append(mySatStuff)
+            
+        mySclIms, someStuff = makeNiceMMs(obsFiles[i], someStuff)    
                         
-        sclIms.append(satScls)
+        sclIms.append(mySclIms)
         satStuff.append(someStuff)
     
     if multiTime:
@@ -1332,6 +1348,9 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
         if stuff[0]['FOV'] > maxFoV: maxFoV = stuff[0]['FOV']
     # pad it a bit then round to a nice number
     maxFoV = int((1.1 * maxFoV) / 5) * 5
+    # EUV only will pull 0 for this, just set higher
+    if maxFoV < 1:
+        maxFoV = 1.5
     # Edit the dictionaries in wombatWF
     wf.rngDict['Height (Rs)'] = [1,maxFoV]
     if maxFoV > 20:

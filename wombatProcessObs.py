@@ -58,17 +58,17 @@ outFile = 'WBobslist.txt'
 #noDiffEUV = True  # keep the EUV images as is instead of base/running diffs 
 
 # AIA setup
-doAIA = True
-AIAwav = [171,193] # Select from 94, 131, 171*, 193*, 211, 304*, 335, 1600, 1700 (* most common)
+doAIA = False
+AIAwav = [171] # Select from 94, 131, 171*, 193*, 211, 304*, 335, 1600, 1700 (* most common)
 
 # LASCO setup
 doLASCO = False
 whichLASCO = ['C2', 'C3'] # Select from 'C2' and 'C3'
 
 # SECCHI setup
-doSECCHI = False
+doSECCHI = True
 #whichSECCHI = ['EUVI', 'COR1', 'COR2',  'HI1', 'HI2'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
-whichSECCHI = ['EUVI'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
+whichSECCHI = ['COR2'] # Select from 'EUVI', 'COR1', 'COR2',  'HI1', 'HI2'
 EUVIwav     = [171] # Select from 171, 195, 284, 304
 
 # SoloHI setup
@@ -141,8 +141,9 @@ if doAIA:
     for aF in AIAfiles:
         aF = aF.lower()
         # Some times AIA has . instead of _ for no apparent reason
-        if aF.count('.') > 1:
-            print(aF[:-4])
+        # but doesn't seem to trip our code
+        #if aF.count('.') > 1:
+        #    print(aF[:-5])
         if singleDay:
             if AIAdatestrs[0] in aF:
                 hm = aF[25:30]
@@ -167,9 +168,10 @@ if doAIA:
     print ('|--- Processing SDO AIA ---|')            
     for i in range(nWav):
         print ('|--- Processing SDO AIA '+str(AIAwav[i])+'---|')            
-        f1.write('SDO_AIA_'+str(AIAwav[i]) + '\n')
         goodFiles[i] = np.sort(np.array(goodFiles[i]))
         ims = aia_prep(goodFiles[i])
+        if len(ims) > 0:
+            f1.write('SDO_AIA_'+str(AIAwav[i]) + '\n')
         for k in range(len(ims)):
             print ('On file '+str(k+1)+' out of '+str(len(ims)))
             im = ims[k]
@@ -401,7 +403,7 @@ if doSECCHI:
         if len(goodFiles['a'][2]) > 0:
             print ('|--- Processing STEREO COR2A ---|')
             f1.write('STEREOA_COR2 \n')
-            imsc2a, hdrsc2a = secchi_prep(goodFiles['a'][2]) 
+            imsc2a, hdrsc2a = secchi_prep(goodFiles['a'][2], outSize=[1024,1024]) 
             for i in range(len(imsc2a)):
                 ymd = hdrsc2a[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
                 fitsName = 'wbpro_stacor2_'+ymd+'.fits'      
