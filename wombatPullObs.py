@@ -37,6 +37,9 @@ Inputs:
             * all STEREO values will pull A and B (as available)
     
 Optional Inputs:
+    outFolder: the top level folder name for where data will be saved
+               defaults to pullFolder/ (from wombatPullObs)
+
     EUVtime: time resolution in minutes to use for EUV images
     
     CORtime: time resolution in minutes to use for coronagraph images
@@ -55,7 +58,7 @@ Usage:
     times = ['YYYY/MM/DDTHH:MM', 'YYYY/MM/DDTHH:MM']
     sats  = ['AIA', 'COR2', 'WISPR']
     waves = [171]
-    outFolder = '/Users/kaycd1/wombat/obsFiles/'
+    outFolder = '/Users/kaycd1/wombat/pullFolder/'
     pullObs(times, sats, waves, outFolder=outFolder)
 
 """
@@ -117,7 +120,7 @@ def setupFolderStructure(topName):
 # |------------------------------------------------------------|
 # |------------------ Grab AIA Observations -------------------|
 # |------------------------------------------------------------|
-def pullAIA(times, wavs, EUVtime=10, outFolder='obsFiles/'):
+def pullAIA(times, wavs, EUVtime=10, outFolder='pullFolder/'):
     """
     Function to pull level 1 AIA observations using FIDO
 
@@ -157,7 +160,7 @@ def pullAIA(times, wavs, EUVtime=10, outFolder='obsFiles/'):
 # |------------------------------------------------------------|
 # |----------------- Grab LASCO Observations ------------------|
 # |------------------------------------------------------------|
-def pullLASCO(times, insts, CORtime=20, outFolder='obsFiles/'):
+def pullLASCO(times, insts, CORtime=20, outFolder='pullFolder/'):
     """
     Function to pull level 0.5 LASCO observations using FIDO
 
@@ -211,16 +214,18 @@ def pullLASCO(times, insts, CORtime=20, outFolder='obsFiles/'):
     if 'C2' in insts:
         if len(whichC[0]):
             print('Downloading LASCO C2 files...')
-            c2path = outFolder + 'LASCO/C2/'
+            c2path = outFolder + 'SOHO/LASCO/C2/'
             for i in range(len(whichC[0])):
+                print (c2path + ymdts[0][i])
                 downloaded_files = Fido.fetch(result[0,whichC[0][i]], path= c2path + ymdts[0][i] + '_C2_{file}') 
+            print (downloaded_files)
         else:
             print('Cannot find any files for LASCO C2')
     # LASCO C3         
     if 'C3' in insts:
         if len(whichC[1]):
             print('Downloading LASCO C3 files...')
-            c3path = outFolder + 'LASCO/C3/'
+            c3path = outFolder + 'SOHO/LASCO/C3/'
             for i in range(len(whichC[1])):
                 downloaded_files = Fido.fetch(result[0,whichC[1][i]], path= c3path + ymdts[1][i] + '_C3_{file}') 
         else:
@@ -231,7 +236,7 @@ def pullLASCO(times, insts, CORtime=20, outFolder='obsFiles/'):
 # |------------------------------------------------------------|
 # |---------------- Grab SoloHI Observations ------------------|
 # |------------------------------------------------------------|
-def pullSoloHI(times, insts, HItime=30, outFolder='obsFiles/'):
+def pullSoloHI(times, insts, HItime=30, outFolder='pullFolder/'):
     """
     Function to pull level 2 SoloHI observations using a combo of Fido search
     and wget from the NRL site directly. Only pulls those with 1ft, 2ft, 3fg,
@@ -337,13 +342,13 @@ def pullSoloHI(times, insts, HItime=30, outFolder='obsFiles/'):
  
 
 # |------------------------------------------------------------|
-# |---------------- Grab SoloHI Observations ------------------|
+# |---------------- Grab STEREO Observations ------------------|
 # |------------------------------------------------------------|
-def pullSTEREO(times, insts, EUVItime=10, CORtime=20, HItime=30, outFolder='obsFiles/'):
+def pullSTEREO(times, insts, EUVItime=10, CORtime=20, HItime=30, outFolder='pullFolder/'):
     """
     Function to pull STEREO observations using Fido 
     Will pull n4eu/n5eu for EUVI, n4c1 for COR1, 
-    d4c2 for COR2 (no pB), X for HI1/2
+    d4c2 for COR2 (no pB), s4c1/2 for HI1/2
 
     Inputs:
         times: an array with [startTime, endTime] where both
@@ -547,7 +552,7 @@ def pullSTEREO(times, insts, EUVItime=10, CORtime=20, HItime=30, outFolder='obsF
 # |------------------------------------------------------------|
 # |----------------- Grab WISPR Observations ------------------|
 # |------------------------------------------------------------|
-def pullWISPR(times, insts, HItime=30, outFolder='obsFiles/'):
+def pullWISPR(times, insts, HItime=30, outFolder='pullFolder/'):
     """
     Function to pull level 2 WISPR observations using a combo of Fido search
     and wget from the NRL site directly
@@ -656,7 +661,7 @@ def pullWISPR(times, insts, HItime=30, outFolder='obsFiles/'):
 # |------------------------------------------------------------|
 # |------------ Main function to pull observations ------------|
 # |------------------------------------------------------------|
-def pullObs(times, insts, outFolder='obsFiles/', EUVtime=10, CORtime=20, HItime=30):
+def pullObs(times, insts, outFolder='pullFolder/', EUVtime=10, CORtime=20, HItime=30):
     """
     Main wrapper function for pulling observations
 
@@ -687,6 +692,9 @@ def pullObs(times, insts, outFolder='obsFiles/', EUVtime=10, CORtime=20, HItime=
                 * all STEREO values will pull A and B (as available)
     
     Optional Inputs:
+        outFolder: the top level folder name for where data will be saved
+                   defaults to pullFolder/
+        
         EUVtime: time resolution in minutes to use for EUV images
     
         CORtime: time resolution in minutes to use for coronagraph images
@@ -719,6 +727,11 @@ def pullObs(times, insts, outFolder='obsFiles/', EUVtime=10, CORtime=20, HItime=
     if quitIt:
         sys.exit('Quitting pullObs since passed invalid instrument tag')
         
+    # |---------------------------------------| 
+    # |--------- Check outFolder name --------|
+    # |---------------------------------------|
+    if outFolder[-1] != '/':
+        outFolder = outFolder+'/'    
             
     # |-----------------------------------------|    
     # |--------- Loop through each sat ---------|   
@@ -733,7 +746,7 @@ def pullObs(times, insts, outFolder='obsFiles/', EUVtime=10, CORtime=20, HItime=
             # If found just save the wavelength
             doAIA.append(inst.replace('AIA',''))
     if len(doAIA) > 0:
-        pullAIA(times, doAIA, EUVtime=EUVtime)
+        pullAIA(times, doAIA, EUVtime=EUVtime, outFolder=outFolder)
             
                 
     # |-------------------------------|
@@ -743,7 +756,7 @@ def pullObs(times, insts, outFolder='obsFiles/', EUVtime=10, CORtime=20, HItime=
     if 'C2' in insts: doLASCO.append('C2')
     if 'C3' in insts: doLASCO.append('C3')
     if len(doLASCO) > 0:
-        pullLASCO(times, doLASCO, CORtime=CORtime)
+        pullLASCO(times, doLASCO, CORtime=CORtime, outFolder=outFolder)
 
    
     # |-------------------------------|
@@ -755,7 +768,7 @@ def pullObs(times, insts, outFolder='obsFiles/', EUVtime=10, CORtime=20, HItime=
         if inst in STkeys:
             doSTEREO.append(inst)
     if len(doSTEREO) > 0:
-        pullSTEREO(times, doSTEREO, CORtime=CORtime)
+        pullSTEREO(times, doSTEREO, CORtime=CORtime, outFolder=outFolder)
     
 
     # |-------------------------------|
@@ -766,7 +779,7 @@ def pullObs(times, insts, outFolder='obsFiles/', EUVtime=10, CORtime=20, HItime=
     elif 'WISPRI' in insts: doWISPR.append('WISPRI')
     elif 'WISPRO' in insts: doWISPR.append('WISPRO')
     if len(doWISPR) > 0:
-        pullWISPR(times, doWISPR, HItime=HItime)
+        pullWISPR(times, doWISPR, HItime=HItime, outFolder=outFolder)
     
 
     # |-------------------------------|
@@ -780,13 +793,13 @@ def pullObs(times, insts, outFolder='obsFiles/', EUVtime=10, CORtime=20, HItime=
         if 'SoloHI3' in inst: doSoloHI.append('SoloHI3')
         if 'SoloHI4' in inst: doSoloHI.append('SoloHI4')
     if len(doSoloHI) > 0:
-        pullSoloHI(times, doSoloHI, HItime=HItime)
+        pullSoloHI(times, doSoloHI, HItime=HItime, outFolder=outFolder)
         
 
 if __name__ == '__main__':
     startT = '2023/09/24T16:00'
     endT   = '2023/09/24T20:00'
     times = [startT, endT]
-    sats  = ['AIA171']
+    sats  = ['C2']
     pullObs(times, sats)
             
