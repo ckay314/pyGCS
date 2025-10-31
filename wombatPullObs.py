@@ -822,10 +822,10 @@ def pullObs(times, insts, outFolder='pullFolder/', EUVtime=10, CORtime=20, HItim
         
 
 if __name__ == '__main__':
-    startT = '2012/07/12T16:00'
-    endT   = '2012/07/12T20:00'
+    startT = '2023/09/24T16:00'
+    endT   = '2023/09/24T20:00'
     
     times = [startT, endT]
-    sats  = ['HI1', 'HI2']
+    sats  = ['COR1', 'HI1', 'HI2']
     pullObs(times, sats)
             

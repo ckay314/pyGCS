@@ -294,7 +294,7 @@ def processAIA(times, wavs, inFolder='pullFolder/SDO/AIA/', outFolder='wbFits/SD
 # |------------------------------------------------------------|
 # |--------------- Process LASCO Observations -----------------|
 # |------------------------------------------------------------|
-def processLASCO(times, insts, inFolder='pullFolder/SOHO/LASCO/', outFolder='wbFits/SOHO/LASCO/', downsize=1024):
+def processLASCO(times, insts, inFolder='pullFolder/SOHO/LASCO/', outFolder='wbFits/SOHO/LASCO/', downSize=1024):
     """
     Function to process level 0.5 LASCO observations using c2_prep/c3_prep
     
@@ -597,11 +597,14 @@ def processSoloHI(times, insts, inFolder='pullFolder/SolO/SoloHI/', outFolder='w
 # |------------------------------------------------------------|
 # |-------------- Process STEREO Observations -----------------|
 # |------------------------------------------------------------|
-def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits/STEREO/', downsize=1024):
+def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits/STEREO/', downSize=1024):
     """
-    Function to pull STEREO observations using Fido 
-    Will pull n4eu/n5eu for EUVI, n4c1 for COR1, 
-    d4c2 for COR2 (no pB), s4c1/2 for HI1/2
+    Function to process STEREO observations using secchi_prep
+    
+    This is a wrapper to find the data and pull the ported versions of IDL solarsoft
+    routines. The resulting fits files are in total brightness and a near exact match
+    to using the original IDL procedures. These files can be passed directly to the
+    wombat mass calculation procedure
 
     Inputs:
         times: an array with [startTime, endTime] where both
@@ -611,19 +614,36 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
                 *** will automatically pull both A/B as available ***
     
     Optional Inputs:
-        CORtime: time resolution in minutes, will set min spacing between images
+        inFolder: top folder for unprocessed results, will open from outFolder/inst/
+                  defaults to pullFolder/SOHO/LASCO/
+               
+        outFolder: top folder for processed results, will be save in outFolder/SOHO/inst/ 
+                   defaults to wbFits/SOHO/LASCO/
+    
+        downSize: maximum resolution to save the processed fits files 
         
-        outFolder: top folder, results will be saved in outFolder/SolO/SoloHI/#/
-
     Outputs:
-        The downloaded fits files will be placed in the appropriate folders within outFolder
-
+        The processed fits files will be placed in the appropriate folders within outFolder
+        and the function returns an array of strings/lines corresponding to the instrument
+        header line and the locations of the processed files. A wrapper function can dump these
+        directly into a text file that is then used to launch the wombat gui.
+    
     """
     # |----------------------------------|
     # |--------- Find the files ---------|
     # |----------------------------------|
     nInsts = len(insts)
-    STEREOfiles = [[] for i in range(nInsts)]
+    STEREOfiles = [[[], []] for i in range(nInsts)]
+    
+    AB = ['A', 'B']
+    for i in range(nInsts):
+        inst = insts[i]
+        for j in range(2):
+            if 'EUVI' in inst:
+                myFold = inFolder+inst.replace('EUVI', 'EUVI'+AB[j]+'/')
+            else:
+                myFold = inFolder+inst+AB[j]
+            STEREOfiles[i][j] =  os.listdir(myFold)
     
     # Make sure we found something before moving on
     nFound = 0
@@ -642,30 +662,102 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
     # |----------------------------------|
     # |--------- Sort the files ---------|
     # |----------------------------------|
-                        
+    goodFiles = [[[],[]] for i in range(nInsts)]
+    for i in range(nInsts):
+        inst = insts[i]
+        # Loop through A/B    
+        for k in range(2):
+            if 'EUVI' in inst:
+                myFold = inFolder+inst.replace('EUVI', 'EUVI'+AB[k]+'/')
+            else:
+                myFold = inFolder+inst+AB[k]
+            for aF in STEREOfiles[i][k]:
+                for j in range(nDays):
+                    if (ymds[j] in aF):
+                        # Check if EUVI which has two _ before date
+                        if aF[0] == 'E':
+                            stidx = 9
+                        # Otherwise COR/HI have single _
+                        else:
+                            stidx = aF.find('_')
+                        hm = aF[stidx+10:stidx+14]
+                        addIt = True
+                        if (j == 0) & (hm < hms[0]):
+                            addIt = False
+                        elif (j == nDays-1) & (hm > hms[1]):
+                            addIt = False
+                        if addIt:
+                            goodFiles[i][k].append(myFold+'/'+aF)
+                                    
     # Make sure we found something in the date range before moving on
     nFound = 0
     for i in range(nInsts):
-        nFound += len(goodFiles[i])
+        for j in range(2):
+            nFound += len(goodFiles[i][j])
     # Return if nothing found
     if nFound == 0:
         print ('No matching STEREO files found')
         return None
     
+    # Make an array and sorted 
+    for i in range(nInsts):
+        for j in range(2):
+            goodFiles[i][j] = np.sort(np.array(goodFiles[i][j]))
     
     # |----------------------------------|
     # |------- Process the files --------|
     # |----------------------------------|                    
     outLines = []   
+    fronts = ['STA_', 'STB_']
+    fronts2 = ['wbpro_sta', 'wbpro_stb']
+    # Add in the actual processing, saving, and output to runFile  
+    print ('|---- Processing STEREO ----|')
+    for i in range(nInsts):
+        inst = insts[i]
+        # Anyone thats not a pB triplet
+        if inst != 'COR1':
+            for j in range(2):
+                if len(goodFiles[i][j]) > 0:
+                    print ('|--- Processing STEREO '+inst+' '+AB[j]+' ---|')
+                    outLines.append(fronts[j]+inst.replace('EUVI','EUVI_')+'\n')
+                    ims, hdrs = secchi_prep(goodFiles[i][j], outSize=[downSize, downSize]) 
+                    for k in range(len(ims)):
+                        ymd = hdrs[k]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                        fitsName = fronts2[j]+inst.lower()+'_'+ymd+'.fits' 
+                        if 'EUVI' in inst:
+                            nowFold = outFolder+inst.replace('EUVI', 'EUVI'+AB[j]+'/')
+                        else:
+                            nowFold = outFolder+inst+AB[j] 
+                        fullName = nowFold + '/' + fitsName   
+                        fits.writeto(fullName, ims[k], hdrs[k], overwrite=True)
+                        outLines.append(fullName+'\n')
 
-                           
+        # Process the triplets
+        else:
+            for j in range(2):
+                # We should have a nice multiple of three from wbpull but double check the
+                # size is at least right
+                if (len(goodFiles[i][j]) > 0) &  ((len(goodFiles[i][j]) % 3) == 0):
+                    ims, hdrs = [], []
+                    print ('|---- Processing '+ str(int(len(goodFiles[i][j])/3)) +' triplets for COR1'+AB[j]+' ----|')
+                    for k in range(int(len(goodFiles[i][j])/3)):
+                        print ('      on triplet ' +str(1+k))
+                        aIm, aHdr = secchi_prep(goodFiles[i][j][3*k:3*(k+1)], polarizeOn=True, silent=True)
+                        ims.append(aIm[0])
+                        hdrs.append(aHdr[0])
+                        ymd = hdrs[k]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                        fitsName = fronts2[j]+inst.lower()+'_'+ymd+'.fits' 
+                        nowFold = outFolder+inst+AB[j] 
+                        fullName = nowFold + '/' + fitsName   
+                        fits.writeto(fullName, ims[k], hdrs[k], overwrite=True)
+                        outLines.append(fullName+'\n')                                                   
     return outLines
     
 
 # |------------------------------------------------------------|
 # |--------------- Process WISPR Observations -----------------|
 # |------------------------------------------------------------|
-def processWISPR(times, insts, inFolder='pullFolder/PSP/WISPR/', outFolder='wbFits/PSP/WISPR/', downsize=1024):
+def processWISPR(times, insts, inFolder='pullFolder/PSP/WISPR/', outFolder='wbFits/PSP/WISPR/', downSize=1024):
     """
     Function to process the level 2 WISPR data
     
@@ -971,5 +1063,5 @@ if __name__ == '__main__':
     startT = '2023/09/24T16:00'
     endT   = '2023/09/24T20:00'
     times = [startT, endT]
-    sats  = ['C2', 'C3']
+    sats  = ['COR1']
     processObs(times, sats)
