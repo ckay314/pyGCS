@@ -711,6 +711,8 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
     fronts = ['STA_', 'STB_']
     fronts2 = ['wbpro_sta', 'wbpro_stb']
     # Add in the actual processing, saving, and output to runFile  
+    
+
     print ('|---- Processing STEREO ----|')
     for i in range(nInsts):
         inst = insts[i]
@@ -735,11 +737,53 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
         # Process the triplets
         else:
             for j in range(2):
-                # We should have a nice multiple of three from wbpull but double check the
-                # size is at least right
-                if (len(goodFiles[i][j]) > 0) &  ((len(goodFiles[i][j]) % 3) == 0):
+                myCOR = 'COR1'+AB[j]
+                # Need to check on making triples, missing files will cause isses
+                
+                all00s = []
+                for aF in goodFiles[i][j]:
+                    if '000_s4c' in aF:
+                        justFile = aF.replace(inFolder+myCOR+'/'+myCOR + '_','')
+                        jF2 = justFile.replace('00_s4c1'+AB[j]+'.fts','')
+                        all00s.append(jF2)
+                all00s = np.array(all00s)
+                trips = [[] for i in range(len(all00s))]
+                for k in range(len(goodFiles[i][j])):
+                    justFile = goodFiles[i][j][k].replace(inFolder+myCOR+'/'+myCOR + '_','')
+                    jF2 = justFile.replace('s4c1'+AB[j]+'.fts','')[:-3]
+                    myTrip = np.where(all00s == jF2)[0]
+                    if len(myTrip) > 0:
+                        trips[myTrip[0]].append(goodFiles[i][j][k])
+                
+                goodTrips = []
+                for trip in trips:
+                    if (len(trip) == 3):
+                        goodTrips.append(trip)
+                
+                if len(goodTrips) > 0:
+                    ims, hdrs = [], []
+                    print ('|---- Processing '+ str(len(trips)) +' triplets for COR1'+AB[j]+' ----|')
+                    outLines.append(fronts[j]+inst+'\n')
+                    for k in range(len(goodTrips)):
+                        print ('      on triplet ' +str(1+k))
+                        aIm, aHdr = secchi_prep(goodTrips[k], polarizeOn=True, silent=True)
+                        ims.append(aIm[0])
+                        hdrs.append(aHdr[0])
+                        ymd = hdrs[k]['DATE-OBS'].replace('-','').replace(':','')[:15]  
+                        fitsName = fronts2[j]+inst.lower()+'_'+ymd+'.fits' 
+                        nowFold = outFolder+inst+AB[j] 
+                        fullName = nowFold + '/' + fitsName   
+                        fits.writeto(fullName, ims[k], hdrs[k], overwrite=True)
+                        outLines.append(fullName+'\n')
+                        
+                    
+                    
+                
+                #print (len(goodFiles[i][j]))
+                '''if (len(goodFiles[i][j]) > 0) &  ((len(goodFiles[i][j]) % 3) == 0):
                     ims, hdrs = [], []
                     print ('|---- Processing '+ str(int(len(goodFiles[i][j])/3)) +' triplets for COR1'+AB[j]+' ----|')
+                    outLines.append(fronts[j]+inst+'\n')
                     for k in range(int(len(goodFiles[i][j])/3)):
                         print ('      on triplet ' +str(1+k))
                         aIm, aHdr = secchi_prep(goodFiles[i][j][3*k:3*(k+1)], polarizeOn=True, silent=True)
@@ -750,7 +794,7 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
                         nowFold = outFolder+inst+AB[j] 
                         fullName = nowFold + '/' + fitsName   
                         fits.writeto(fullName, ims[k], hdrs[k], overwrite=True)
-                        outLines.append(fullName+'\n')                                                   
+                        outLines.append(fullName+'\n')'''                                                   
     return outLines
     
 
@@ -1060,8 +1104,8 @@ def processObs(times, insts, inFolder='pullFolder/', outFolder='wbFits/', outFil
         
 
 if __name__ == '__main__':
-    startT = '2023/09/24T16:00'
-    endT   = '2023/09/24T20:00'
+    startT = '2012/07/12T16:00'
+    endT   = '2012/07/12T22:00'
     times = [startT, endT]
     sats  = ['COR1']
     processObs(times, sats)

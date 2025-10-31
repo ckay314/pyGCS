@@ -514,8 +514,21 @@ def pullSTEREO(times, insts, EUVtime=10, CORtime=20, HItime=30, outFolder='pullF
                     justTot[j].append(idx)
                 else:
                     if (result[0]['Start Time'][idx] - result[0]['Start Time'][justTot[j][-1]]).to(u.min).to_value() >= CORtime:
-                         justTot[j].append(idx)
+                         justTot[j].append(idx)            
     whichC[1] = justTot
+    
+    # Filter out HIs too (potentially, but prob not)
+    for j in range(2):
+        for k in [2,3]:
+            myKeeps = []
+            for idx in whichC[k][j]:
+                if len(myKeeps) == 0:
+                    myKeeps.append(idx)
+                else:
+                    if (result[0]['Start Time'][idx] - result[0]['Start Time'][myKeeps[-1]]).to(u.min).to_value() >= HItime:
+                         myKeeps.append(idx)
+            whichC[k][j] = myKeeps
+                
 
     # |-----------------------------|
     # |-------- Downloading --------|
@@ -822,10 +835,10 @@ def pullObs(times, insts, outFolder='pullFolder/', EUVtime=10, CORtime=20, HItim
         
 
 if __name__ == '__main__':
-    startT = '2023/09/24T16:00'
-    endT   = '2023/09/24T20:00'
+    startT = '2012/07/12T16:00'
+    endT   = '2012/07/12T22:00'
     
     times = [startT, endT]
-    sats  = ['COR1', 'HI1', 'HI2']
-    pullObs(times, sats)
+    sats  = [ 'COR1']
+    pullObs(times, sats, CORtime=10)
             
