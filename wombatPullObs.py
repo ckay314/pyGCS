@@ -344,10 +344,10 @@ def pullSoloHI(times, insts, HItime=30, outFolder='pullFolder/'):
 # |------------------------------------------------------------|
 # |---------------- Grab STEREO Observations ------------------|
 # |------------------------------------------------------------|
-def pullSTEREO(times, insts, EUVItime=10, CORtime=20, HItime=30, outFolder='pullFolder/'):
+def pullSTEREO(times, insts, EUVtime=10, CORtime=20, HItime=30, outFolder='pullFolder/'):
     """
     Function to pull STEREO observations using Fido 
-    Will pull n4eu/n5eu for EUVI, n4c1 for COR1, 
+    Will pull n4eu/n5eu for EUVI, s/n4c1 for COR1, 
     d4c2 for COR2 (no pB), s4c1/2 for HI1/2
 
     Inputs:
@@ -400,7 +400,7 @@ def pullSTEREO(times, insts, EUVItime=10, CORtime=20, HItime=30, outFolder='pull
     # |-----------------------------|
     # EUVI sorting 
     if len(EUVIwav) > 0:
-        wavidx = [[] for i in range(len(EUVIwav))]
+        wavidx = [[[], []] for i in range(len(EUVIwav))]
     
         # Sometimes Fido decides to give no wavelengths for EUVI so have to work around
         # Test if all entries have two values, the EUVI none flags will trip this
@@ -412,141 +412,166 @@ def pullSTEREO(times, insts, EUVItime=10, CORtime=20, HItime=30, outFolder='pull
             print("Fido has decided not to provide EUVI wavelengths so have to download them all")
         if not waveIssue:
             for i in range(len(EUVIwav)):
-                wavidx[i]=np.where(result[0]['Wavelength'][:,0] == EUVIwav[i]*u.AA)[0]
+                wavidx[i][0] =np.where((result[0]['Wavelength'][:,0] == EUVIwav[i]*u.AA) & (result[0]['Source'] == 'STEREO_A'))[0]
+                wavidx[i][1] =np.where((result[0]['Wavelength'][:,0] == EUVIwav[i]*u.AA) & (result[0]['Source'] == 'STEREO_B'))[0] 
+
                 # Manually downselect 
-                fullN = len(wavidx[i])
-                expN  = timeRange / EUVItime
-                if fullN > expN:
-                    downN = int(fullN / expN)
-                    wavidx[i] = wavidx[i][::downN]
-            if len(wavidx[i]) < 1:
+                '''for j in range(2):
+                    fullN = len(wavidx[i][j])
+                    expN  = timeRange / EUVItime
+                    if fullN > expN:
+                        downN = int(fullN / expN)
+                        wavidx[i][j] = wavidx[i][j][::downN]'''
+                sublist = [[],[]]
+                for j in range(2):
+                    for idx in wavidx[i][j]:
+                        if len(sublist[j]) == 0:
+                            sublist[j].append(idx)
+                        else:
+                            if (result[0]['Start Time'][idx] - result[0]['Start Time'][sublist[j][-1]]).to(u.min).to_value() >= EUVtime:
+                                 sublist[j].append(idx)
+                wavidx[i] = sublist
+            
+            
+            if (len(wavidx[i][0]) + len(wavidx[i][0]))  < 1:
                 print('Cannot find any files for EUVI', EUVIwav[i])
         else:
-            wavidx = []
+            wavidx = [[],[]]
             for i in range(len(result[0]['fileid'])):
                 if ('/euvi/' in result[0]['fileid'][i]) & ('_n7eu' not in result[0]['fileid'][i]):
-                    wavidx.append(i)       
+                    if ('a/') in result[0]['fileid'][i]:
+                        wavidx[0].append(i) 
+                    elif ('b/') in result[0]['fileid'][i]:
+                        wavidx[1].append(i)      
                 
             # Downselect because Fido will def lag with too many    
             # There's no good way of picking which ones we keep    
             nCrit = 30
-            if len(wavidx) > nCrit:  
-                downSel = int(len(wavidx) / nCrit)
-                wavidx = wavidx[::downSel]
-    
+            for i in range(2):
+                if len(wavidx[i]) > nCrit:  
+                    downSel = int(len(wavidx[i]) / nCrit)
+                    wavidx[i] = wavidx[i][::downSel]
+                    
     # Sort the CORs and HIs
-    whichC = [[], [], [], []]    
+    whichC = [[[], []], [[], []], [[], []], [[], []]]   
     for i in range(len(result[0]['fileid'])):
-        if '/cor1/' in result[0]['fileid'][i]:
-            whichC[0].append(i)
+        mySpot, mySpot = -9999, -9999 
+        if ('/cor1/' in result[0]['fileid'][i]) & ('/seq/' in result[0]['fileid'][i]) :
+            mySpot = 0
+            #whichC[0].append(i)
         elif '/cor2/' in result[0]['fileid'][i]:
-            whichC[1].append(i)
+            mySpot = 1
+            #whichC[1].append(i)
         elif '/hi_1/' in result[0]['fileid'][i]:
-            whichC[2].append(i)
+            mySpot = 2
+            #whichC[2].append(i)
         elif '/hi_2/' in result[0]['fileid'][i]:
-            whichC[3].append(i)
-    
+            mySpot = 3
+            #whichC[3].append(i)
+        if '/a/' in result[0]['fileid'][i]:
+            mySat = 0
+        if '/b/' in result[0]['fileid'][i]:
+            mySat = 1
+            
+        if (mySpot != -9999) &  (mySat != -9999): 
+            whichC[mySpot][mySat].append(i)
+
     # Need to filter COR1 but keep full pB series
     # the series will have s4c1 tags early that 
     # at some point in switch to n4c1 
-    whichC[0] = whichC[0][2:]
-    nTimes = len(whichC[0]) / 3
-    if nTimes - int(nTimes) != 0:
-        if (whichC[0][1]-whichC[0][0]) != 1:
-            whichC[0] = whichC[0][1:]
-        elif (whichC[0][2]-whichC[0][1]) != 1:
-            whichC[0] = whichC[0][2:]
-        nTimes = len(whichC[0]) / 3
-    expN  = timeRange / CORtime
-    if nTimes > expN:
-       downN = int(nTimes / expN) * 3
-       partial = whichC[0][::downN]    
-       full = np.zeros(len(partial)*3, dtype=int)
-       for i in range(len(partial)):
-           #idx = int(partial[i])
-           cidx = np.where(np.array(whichC[0]) == partial[i])[0][0]
-           full[3*i: 3*(i+1)]= [whichC[0][cidx], whichC[0][cidx+1], whichC[0][cidx+2]]
-           #full[3*i: 3*(i+1)]= [idx, idx+1, idx+2]
-       whichC[0] = full
+    for j in range(2):
+        #whichC[0][j] = whichC[0][j] # using this to test diff start points
+        nTimes = len(whichC[0][j]) / 3
+        if nTimes - int(nTimes) != 0:
+            if (whichC[0][j][1]-whichC[0][j][0]) != 1:
+                whichC[0][j] = whichC[0][j][1:]
+            elif (whichC[0][j][2]-whichC[0][j][1]) != 1:
+                whichC[0][j] = whichC[0][j][2:]
+            nTimes = len(whichC[0][j]) / 3
+        expN  = timeRange / CORtime
+        if nTimes > expN:
+           downN = int(nTimes / expN) * 3
+           partial = whichC[0][j][::downN]   
+           full = np.zeros(len(partial)*3, dtype=int)
+           for i in range(len(partial)):
+               #idx = int(partial[i])
+               cidx = np.where(np.array(whichC[0][j]) == partial[i])[0][0]
+               if cidx+2 < len(whichC[0][j]):
+                   full[3*i: 3*(i+1)]= [whichC[0][j][cidx], whichC[0][j][cidx+1], whichC[0][j][cidx+2]]
+               #full[3*i: 3*(i+1)]= [idx, idx+1, idx+2]
+           whichC[0][j] = full
+           
+
     # Filter out pB images based on file tags
     # d4c tag is totB, n4c is pB and skipping those (for now at least)
-    justTot = []
-    for idx in whichC[1]:
-        # d4c tag is totB, n4c is pB and skipping those (for now at least)
-        # Also only want to pull the ~8 mb images
-        if ('d4c' in result[0]['fileid'][idx]) & (result[0]['Size'][idx].to_value() > 4.):
-            if len(justTot) == 0:
-                justTot.append(idx)
-            else:
-                if (result[0]['Start Time'][idx] - result[0]['Start Time'][justTot[-1]]).to(u.min).to_value() >= CORtime:
-                     justTot.append(idx)
+    justTot = [[], []]
+    for j in range(2):
+        for idx in whichC[1][j]:
+            # d4c tag is totB, n4c is pB and skipping those (for now at least)
+            # Also only want to pull the ~8 mb images
+            if ('d4c' in result[0]['fileid'][idx]) & (result[0]['Size'][idx].to_value() > 4.):
+                if len(justTot[j]) == 0:
+                    justTot[j].append(idx)
+                else:
+                    if (result[0]['Start Time'][idx] - result[0]['Start Time'][justTot[j][-1]]).to(u.min).to_value() >= CORtime:
+                         justTot[j].append(idx)
     whichC[1] = justTot
-    
+
     # |-----------------------------|
     # |-------- Downloading --------|
     # |-----------------------------|
+    AB = ['A', 'B']
     # Do the DLs        
     if len(EUVIwav) > 0:
         if not waveIssue:
             for i in range(len(wavidx)):
-                idxs = wavidx[i]
-                if len(idxs) > 0:
-                    print('Downloading STEREO EUVI ' + str(EUVIwav[i]) + ' files...')
-                    downloaded_files = Fido.fetch(result[0,idxs], path=outFolder + 'STEREO/EUVI_' + str(EUVIwav[i]) + 'a_{file}')
+                for j in range(2):
+                    idxs = wavidx[i][j]
+                    if len(idxs) > 0:
+                        print('Downloading STEREO EUVI'+ AB[j] + ' ' + str(EUVIwav[i]) + ' files...')
+                        fullOut = outFolder + 'STEREO/EUVI'+ AB[j]+'/' + str(EUVIwav[i])+'/'
+                        downloaded_files = Fido.fetch(result[0,idxs], path= fullOut + 'EUVI_'+ str(EUVIwav[i])+'a_{file}')
         else:
-            if len(wavidx)>0:
-                print('Downloading Mystery STEREO EUVI files...')
-                downloaded_files = Fido.fetch(result[0,wavidx], path=outFolder + 'STEREO/EUVI_UNKa_{file}')
-                for aF in downloaded_files:
-                    mySat = aF[-5].upper()
-                    with fits.open(aF) as hdulist:
-                        im  = hdulist[0].data
-                        hdr = hdulist[0].header
-                        print(aF, 'has wavelength ', str(hdr['WAVELNTH']))
-                        newName = aF.replace('_UNKa',mySat+'/'+str(hdr['WAVELNTH'])+'/EUVI_'+str(hdr['WAVELNTH'])+'a')
-                        print(newName)
-                        os.replace(aF,newName)
+            for j in range(2):
+                if len(wavidx[j])>0:
+                        print('Downloading Mystery STEREO EUVI files...')
+                        downloaded_files = Fido.fetch(result[0,wavidx[j]], path=outFolder + 'STEREO/EUVI_UNKa_{file}')
+                        for aF in downloaded_files:
+                            mySat = aF[-5].upper()
+                            with fits.open(aF) as hdulist:
+                                im  = hdulist[0].data
+                                hdr = hdulist[0].header
+                                print(aF, 'has wavelength ', str(hdr['WAVELNTH']))
+                                newName = aF.replace('_UNKa',mySat+'/'+str(hdr['WAVELNTH'])+'/EUVI_'+str(hdr['WAVELNTH'])+'a')
+                                os.replace(aF,newName)
             
     if 'COR1' in CORs:
-        #print(result[0,whichC[0]])
-        if len(whichC[0]) > 0:
-            print('Downloading STEREO COR1 files...')
-            downloaded_files = Fido.fetch(result[0,whichC[0]], path=outFolder+'STEREO/COR1_{file}') 
-            # Move them into the correct A/B folder
-            for aF in downloaded_files:
-                mySat = aF[-5].upper()
-                newName = aF.replace('COR1_', 'COR1'+mySat+'/COR1'+mySat+'_')
-                os.replace(aF,newName)
+        for j in range(2):
+            if len(whichC[0][j]) > 0:
+                print('Downloading STEREO COR1'+AB[j]+' files...')
+                fullOut = outFolder + 'STEREO/COR1'+ AB[j]+'/'
+                downloaded_files = Fido.fetch(result[0,whichC[0][j]], path=fullOut+'/COR1'+ AB[j] +'_{file}') 
+
     if 'COR2' in CORs:
-        #print(result[0,whichC[1]])
-        if len(whichC[0]) > 0:
-            print('Downloading STEREO COR2 files...')
-            downloaded_files = Fido.fetch(result[0,whichC[1]], path=outFolder+'STEREO/COR2_{file}') 
-            # Move them into the correct A/B folder
-            for aF in downloaded_files:
-                mySat = aF[-5].upper()
-                newName = aF.replace('COR2_', 'COR2'+mySat+'/COR2'+mySat+'_')
-                os.replace(aF,newName)
+        for j in range(2):
+            if len(whichC[1][j]) > 0:
+                print('Downloading STEREO COR2'+AB[j]+' files...')
+                fullOut = outFolder + 'STEREO/COR2'+ AB[j]+'/'
+                downloaded_files = Fido.fetch(result[0,whichC[1][j]], path=fullOut+'/COR2'+ AB[j] +'_{file}') 
+                    
     if 'HI1' in HIs:
-        #print(result[0,whichC[2]])
-        if len(whichC[0]) > 0:
-            print('Downloading STEREO HI1 files...')
-            downloaded_files = Fido.fetch(result[0,whichC[2]], path=outFolder+'STEREO/HI1_{file}') 
-            # Move them into the correct A/B folder
-            for aF in downloaded_files:
-                mySat = aF[-5].upper()
-                newName = aF.replace('HI1_', 'HI1'+mySat+'/HI1'+mySat+'_')
-                os.replace(aF,newName)
+        for j in range(2):
+            if len(whichC[2][j]) > 0:
+                print('Downloading STEREO HI1'+AB[j]+' files...')
+                fullOut = outFolder + 'STEREO/HI1'+ AB[j]+'/'
+                downloaded_files = Fido.fetch(result[0,whichC[2][j]], path=fullOut+'/HI1'+ AB[j] +'_{file}') 
+
     if 'HI2' in HIs:
-        #print(result[0,whichC[3]])
-        if len(whichC[0]) > 0:
-            print('Downloading STEREO HI2 files...')
-            downloaded_files = Fido.fetch(result[0,whichC[3]], path=outFolder+'STEREO/HI2_{file}') 
-            # Move them into the correct A/B folder
-            for aF in downloaded_files:
-                mySat = aF[-5].upper()
-                newName = aF.replace('HI2_', 'HI2'+mySat+'/HI2'+mySat+'_')
-                os.replace(aF,newName)
+        for j in range(2):
+            if len(whichC[3][j]) > 0:
+                print('Downloading STEREO HI2'+AB[j]+' files...')
+                fullOut = outFolder + 'STEREO/HI2'+ AB[j]+'/'
+                downloaded_files = Fido.fetch(result[0,whichC[3][j]], path=fullOut+'/HI2'+ AB[j] +'_{file}') 
     
 
 # |------------------------------------------------------------|
@@ -797,9 +822,10 @@ def pullObs(times, insts, outFolder='pullFolder/', EUVtime=10, CORtime=20, HItim
         
 
 if __name__ == '__main__':
-    startT = '2023/09/24T16:00'
-    endT   = '2023/09/24T20:00'
+    startT = '2012/07/12T16:00'
+    endT   = '2012/07/12T20:00'
+    
     times = [startT, endT]
-    sats  = ['C2']
+    sats  = ['HI1', 'HI2']
     pullObs(times, sats)
             
