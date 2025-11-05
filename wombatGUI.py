@@ -1,60 +1,111 @@
+#!/usr/bin/env python
+
+"""
+Set of functions and classes used to build and run the WOMBAT GUI
+
+The main function is releaseTheWombat, which is likely the only function
+one would need to call in an external program
+
+Inputs:
+    obsFiles: nested lists of maps and headers that releaseTheWombat uses to
+              set up the background images in the form [inst1, inst2, ...] 
+              where each insts is an array of [[maps], [hdrs]] where maps and 
+              hdrs are time series of the obs  maps and their corresponding headers 
+              (e.g. [[[COR2Amap1, COR2Amap2, ...], [COR2Ahdr1, COR2Ahdr2, ...]]
+                     [[C2map1, C2map2, ...], [C2Ahdr1, C2hdr2, ...]]
+                     [[AIA171map1, AIA171map2, ...], [AIA171hdr1, AIA171hdr2, ...]]])
+
+Outputs:
+    No outputs unless the save button is clicked. If clicked, it will save fits files
+    for the backgrounds (processed as RD/BD) in wbFits/reloads and in wboutputs it
+    will save wombatSummaryFile.txt which can be used to reload the current setup and
+    a png file for each observation panel and one for the overview panel (if present)
+
+External Calls:
+    everything from wombatWF, wombatLoadCTs
+    fitshead2wcs, wcs_get_pixel, wcs_get_coord from wcs_funs in the prep code
+
+"""
+
 import sys, os
 import numpy as np
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QGridLayout, QTabWidget, QSlider, QComboBox, QLineEdit, QPushButton
 from PyQt5 import QtCore
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-import wombatWF as wf
 import pyqtgraph as pg
-from sunpy.visualization.colormaps import color_tables
-
 import datetime
 from itertools import pairwise
-
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy import units as u
 
-
+import wombatWF as wf
 from wombatLoadCTs import *
 
+# This will need to be updated to local folder eventually
+sys.path.append('/Users/kaycd1/STEREO_Mass/IDLport') 
 from wcs_funs import fitshead2wcs, wcs_get_pixel, wcs_get_coord
-#from GCSgui import pts2proj
 
+# |------------------------------------------------------------|
+# |----------------- Suppress QGrid Warnings ------------------|
+# |------------------------------------------------------------|
 import logging
 logging.basicConfig(level='INFO')
 slogger = logging.getLogger('QGridLayout')
 slogger.setLevel(logging.ERROR)
 
-# Maintain a limited number of global variables to make passing things easier
-# (had to move into releaseTheWombats after function-ifying)
-# main window = the parameter window
-# pws = array of plot windows
-# wfs = array of wireframes in theoryland coords
-# bmodes = array of integer background scaling modes, defaults to linear = 0
-#global mainwindow, pws, nSats, wfs, nwfs, bmodes
-
-
-global occultDict, WFname2id
-# Nominal radii (in Rs) for the occulters for each instrument. Pulled from google so 
-# generally correct (hopefully) but not the most precise
-occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.5,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215], 'STEREO_SECCHI_EUVI':[0,1.7],'SDO_AIA':[0,1.35]} 
-WFname2id = {'GCS':1, 'Torus':2, 'Sphere':3, 'Half Sphere':4, 'Ellipse':5, 'Half Ellipse':6, 'Slab':7}
-        
+# |------------------------------------------------------------|
+# |------------------ Parameter Window Class ------------------|
+# |------------------------------------------------------------|
 class ParamWindow(QMainWindow):
+    """
+    Class for the window with parameter settings. It sets up the layout
+    and widgets and connects them to the global variables defining the
+    wireframe shapes.
+    
+    Inputs:
+        nTabs: the number of panels within the window (one for each
+               wireframe object). We limit this to a maximum number of 10
+               bc the program slows as the number increase and there
+               aren't many use cases for 10+ wireframs
+    
+    Optional Input:
+        tlabs: labels for the time slider (instead of printing an index)
+               defaults to none
+     
+    """
     def __init__(self, nTabs, tlabs=None):
+        """
+        Intial setup for the param window class.
+    
+        Inputs:
+            nTabs: the number of panels within the window (one for each
+                   wireframe object)
+    
+        Optional Input:
+            tlabs: labels for the time slider (strings of date time). This
+                   also tells the window how many time steps to have. Passing
+                   none indicates a single time step
+                   defaults to None
+     
+        """
         super().__init__()
+        
+        # Suggest that more than 10 windows is a bad idea
         if nTabs > 10:
             sys.exit('Do you really need to fit >10 wireframes at once? If so figure out where the upper limit of 10 is hardcoded in the ParamWindow class in wombatGUI.py')
         self.nTabs = nTabs
         
+        # Check how many times we have using the name strings
+        # Or make the times slider for 2+ times
         if type(tlabs) != type(None):    
             self.nTsli = len(tlabs) - 1 # slider goes 0 to val so subtract 1
             self.tlabs = tlabs
+        # Hide the time slider if we only have one time
         else:
             self.nTsli = 0 # random number to make it happy
             self.tlabs = ['']
-            
+        
+        # Window size and name    
         self.setWindowTitle('Wombat Parameters')
         self.setGeometry(100, 100, 300, 950)
         self.setFixedSize(300, 950) 
@@ -71,19 +122,19 @@ class ParamWindow(QMainWindow):
         self.WFnum2type = ['None', 'GCS', 'Torus', 'Sphere', 'Half Sphere', 'Ellipse', 'Half Ellipse', 'Slab']
         self.WFshort = {'GCS':'GCS', 'Torus':'Tor', 'Sphere':'Sph', 'Half Sphere':'HSph', 'Ellipse':'Ell', 'Half Ellipse':'HEll', 'Slab':'Slab'}
         
-        # Create holder for the WF and the params
-        #self.WFs = theWFs #np.array([None for i in range(nTabs)])
+        # Create holder for the WF params
         self.WFparams = np.array([np.zeros(10) for i in range(nTabs)])
         
-        # holders for the param widgets so we can rm them
+        # Holders for the param widgets so we can rm them if turn off a wf
         self.WFLays = []
         self.widges = [None for i in range(nTabs)]
         self.layouts = []
         self.cbs = []
         
-        # Number of points in the sliders
+        # Number of points in the parameter sliders
         self.nSliders = 201
-
+        
+        # Set up the layout within each tab
         for i in range(nTabs):
             aTab = QWidget()
             layout, WFlay = self.paramLayout(i)
@@ -94,17 +145,24 @@ class ParamWindow(QMainWindow):
             self.WFLays.append(WFlay)
         
 
-    #|------------------------------| 
-    #|----------- Layout -----------|
-    #|------------------------------| 
-
+    #|-------------------------------------| 
+    #|--------- Layout Functions ----------|
+    #|-------------------------------------| 
     def paramLayout(self, i):
-        # Start with fake massive layout to setup grid size
+        """
+        Layout set up for a full tab panel
+    
+        Inputs:
+            i: tab number
+     
+        """
+        # |------ Start Layout ------|
+        # Start with fake massive label to setup grid size
         layout = QGridLayout()
         label = QLabel('')
         layout.addWidget(label, 0,0,40,11,alignment=QtCore.Qt.AlignCenter)
         
-        # Time slider/label
+        # |------ Time Label ------|
         if self.nTsli > 0:
             myTlab = 'Time selection: '+self.tlabs[0]
             Tlabel = QLabel(myTlab)
@@ -113,8 +171,8 @@ class ParamWindow(QMainWindow):
         self.Tlabel = Tlabel
         layout.addWidget(Tlabel,0,0,1,10,alignment=QtCore.Qt.AlignLeft)
         
+        # |------ Time Slider ------|
         Tslider1 = QSlider()
-        #slider1.setGeometry(QtCore.QRect(0, 100, 160, 25))
         Tslider1.setOrientation(QtCore.Qt.Horizontal)
         # Slider doesn't like the number 1 for no apparent reason
         # so easiest just to avoid
@@ -123,47 +181,54 @@ class ParamWindow(QMainWindow):
         layout.addWidget(Tslider1, 1,0,1,11)
 
 
+        # |------ WF Type Label ------|
         label = QLabel('Wireframe Type')
         layout.addWidget(label, 2,0,1,11,alignment=QtCore.Qt.AlignCenter)
         
-        # Drop down box
+        # |----- WF Drop Down Box ----|
         cbox = self.wfComboBox(i)
         self.cbs.append(cbox)
         layout.addWidget(cbox,3,0,1,11,alignment=QtCore.Qt.AlignCenter)
         
+        # |------ Parameter Section Label ------|
         label = QLabel('Parameters')
         layout.addWidget(label, 5,0, 1, 5,alignment=QtCore.Qt.AlignCenter)
         
+        # |----- Show/Hide WF Button ----|
         hideBut = QPushButton('Show/Hide WF')
         hideBut.released.connect(lambda: self.HBclicked(i))
         layout.addWidget(hideBut, 5, 6, 1,5)
         
-        
+        # |----- Nested parameter layout ----|       
         # Put a layout within the layout for the slider friends
         # It's like inception but without Elliot Page explaining everything
         WFLay = QGridLayout()
         layout.addLayout(WFLay, 7,0,25,11)
         
         
+        # |----- Background Drop Down Box ----|
         # Background mode drop down box
         label = QLabel('Background Scaling')
         layout.addWidget(label, 41,0,1,6,alignment=QtCore.Qt.AlignCenter)
         cbox = self.bgComboBox()
         layout.addWidget(cbox,41,5,1,6,alignment=QtCore.Qt.AlignCenter)
         
+        # |----- Happy Little Space Padding ----|
         label = QLabel('')
         layout.addWidget(label, 42,0,2,11,alignment=QtCore.Qt.AlignCenter)
         
 
+        # |----- Save Button ----|
         saveBut = QPushButton('Save')
         saveBut.released.connect(self.SBclicked)
         layout.addWidget(saveBut, 43, 0, 1,3,alignment=QtCore.Qt.AlignCenter)
 
+        # |----- Mass Button ----|
         massBut = QPushButton('Mass')
         massBut.released.connect(self.MBclicked)
         layout.addWidget(massBut, 43, 4, 1,3,alignment=QtCore.Qt.AlignCenter)
 
-        # Add things at the bottom
+        # |----- Exit Button ----|
         exitBut = QPushButton('Exit')
         exitBut.released.connect(self.EBclicked)
         exitBut.setStyleSheet("background-color: red")
@@ -172,7 +237,20 @@ class ParamWindow(QMainWindow):
         return layout, WFLay
     
     def wfComboBox(self,i):
+        """
+        Combo box for the wireframe type
+    
+        Inputs:
+            i: tab number
+        
+        Outputs:
+            cbox: the widget
+     
+        """
+         # |----- Make Combo Box ----|
         cbox = QComboBox()
+        
+        # |----- Add Items ----|
         cbox.addItem('|----None/Select One----|')
         cbox.addItem('GCS')
         cbox.addItem('Torus')
@@ -181,66 +259,118 @@ class ParamWindow(QMainWindow):
         cbox.addItem('Ellipse')
         cbox.addItem('Half Ellipse')
         cbox.addItem('Slab')
+        
+         # |----- Connect Event ----|
         cbox.currentIndexChanged.connect(lambda x: self.cb_index_changed(x,i))
         return cbox
         
     def bgComboBox(self):
+        """
+        Combo box for the wireframe type
+    
+        Inputs:
+            i: tab number
+        
+        Outputs:
+            cbox: the widget
+     
+        """
+        # |----- Make Combo Box ----|
         cbox = QComboBox()
+        
+        # |----- Add Items ----|
         cbox.addItem('Linear')
         cbox.addItem('Log')
         cbox.addItem('SQRT')
+        
+        # |----- Connect Event ----|
         cbox.currentIndexChanged.connect(self.back_changed)
         return cbox
         
     def WFparamLayout(self, myWF):
+        """
+        Layout set up for the WF parameter portion, this is nested within
+        the full parameter layout. The number of sliders and all of their
+        properties will be set by values in myWF
+    
+        Inputs:
+            myWF: the wireframe object we attach to these parameters
+        
+        Outputs:
+            WFlay: the layout 
+        
+            widges: an array of widgets for all the parameters, organized as
+                    [[TextBox1, TextBox2, ...], [Slider1, Slider2, ...]]
+                    yes it is widges not widgets 
+     
+        """
+        # |---------------------------------------|
+        # |------------ Set up Widgets -----------| 
+        # |---------------------------------------|
+       
+        # |------- Time Label -------|
         WFLay = QGridLayout()
+        
+        # |------ Make widgets ------|
+        # Make a label, text box, and slider for each parameter
+        # The number of parameters varies based on WF type but this
+        # will pull out the appropriate value from myWF
         widges = [[], []]
-        i2f = []
-        nSliders = self.nSliders
+        i2f = [] # integer to float for slider to value
+        nSliders = self.nSliders # number of points within a slider
+        
+        # We have a maximum of 9 parameters so loop through all possible
+        # ones and add/hide as necessary 
         for i in range(9):
+            # Compare to number of labels from myWF
+            # Add if we have a param for i
             if i < len(myWF.labels):
                 # Get the conversion factor between the slider integers and float vals
                 myRng = myWF.ranges[i]
                 i2f.append((myRng[1] - myRng[0]) / (nSliders - 1))
-                # Label
+                
+                # |------ Label ------|
                 myDef = myWF.params[i]
                 label = QLabel(myWF.labels[i]) 
                 WFLay.addWidget(label, 3*i,1,1,3)   
-                # Text box
+                
+                # |------ Label ------|
                 wBox = QLineEdit()
-                #wBox.setText(str(myDef)) 
                 WFLay.addWidget(wBox, 3*i,7,1,3)  
                 widges[0].append(wBox)
                 
-                # Slider
-                #myRng = myWF.ranges[i]
+                # |------ Slider ------|
                 slider = QSlider()
                 slider.setOrientation(QtCore.Qt.Horizontal)
                 slider.setRange(0,nSliders)
-                #slider.setValue(int(myDef))
                 WFLay.addWidget(slider, 3*i+1,1,1,9)  
                 widges[1].append(slider)
                 
+            # If we don't have this many labels throw some blank widgets of the same
+            # size in the GUI to keep the layout positioned the same    
             else:
-                # Throw in the same size things but hidden to make it happy
+                # |------ Blank Label ------|
                 label = QLabel('')
                 WFLay.addWidget(label, 3*i,1,1,3)   
                 label = QLabel('')
                 WFLay.addWidget(label, 3*i,1,1,3)   
-                # Need to add something same height as box that doesnt complain
-                #wBox = QLineEdit()
-                #wBox.setFixedSize(1, 30)
-                #WFLay.addWidget(wBox, 3*i,7,0,1)
+                
+                # |------ Hidden Slider ------|
                 slider = QSlider()
                 slider.setOrientation(QtCore.Qt.Horizontal)
                 # Setting these to zero makes it disappear
                 slider.setMinimum(0)
                 slider.setMaximum(0)
                 WFLay.addWidget(slider, 3*i+1,1,1,9)  
-         
+        
+        # |---------------------------------------|
+        # |------ Connect Widgets to Events ------| 
+        # |---------------------------------------|
         # Need to do this explicit for each one for some reason other wise gets
         # upset about the looped index variable
-        # Params 1-4 always happen
+        
+        # |------ Parameters 1 - 4 ------|
+        # All wftype have 4+ parameters so these always included
         widges[1][0].valueChanged.connect(lambda x: self.s2b(x, widges[0][0], i2f[0], myWF.ranges[0][0], myWF, widges))  
         widges[0][0].returnPressed.connect(lambda: self.b2s(widges[1][0], widges[0][0], i2f[0], myWF.ranges[0][0],nSliders, myWF, widges))     
         widges[1][1].valueChanged.connect(lambda x: self.s2b(x, widges[0][1], i2f[1], myWF.ranges[1][0], myWF, widges))  
@@ -249,7 +379,8 @@ class ParamWindow(QMainWindow):
         widges[0][2].returnPressed.connect(lambda: self.b2s(widges[1][2], widges[0][2], i2f[2], myWF.ranges[2][0],nSliders, myWF, widges))
         widges[1][3].valueChanged.connect(lambda x: self.s2b(x, widges[0][3], i2f[3], myWF.ranges[3][0], myWF, widges))  
         widges[0][3].returnPressed.connect(lambda: self.b2s(widges[1][3], widges[0][3], i2f[3], myWF.ranges[3][0],nSliders, myWF, widges))
-        # Have to check remaining
+        # |-------- Parameters 5+ -------|
+        # Need to check each of the remaining bc depends on wftype
         myNP = len(myWF.labels)
         # At least 5 params
         if myNP > 4:
@@ -272,6 +403,9 @@ class ParamWindow(QMainWindow):
             widges[1][8].valueChanged.connect(lambda x: self.s2b(x, widges[0][8], i2f[8], myWF.ranges[8][0], myWF, widges))  
             widges[0][8].returnPressed.connect(lambda: self.b2s(widges[1][8], widges[0][8], i2f[8], myWF.ranges[8][0],nSliders, myWF, widges))
             
+        # |---------------------------------------|
+        # |------- Initiate Widget Values --------| 
+        # |---------------------------------------|
         # Set things to the values the WF has
         for i in range(myNP):
             myVal = myWF.params[i]
@@ -285,36 +419,85 @@ class ParamWindow(QMainWindow):
             widges[1][i].setValue(slidx)
             widges[0][i].setText(str(myVal))
         
-        
-        
-         
+        # An attempt to make things always stay the same size
         # This isn't exact same across all WF but close
         for i in range(WFLay.rowCount()):
                 WFLay.setRowStretch(i, 1)
         return WFLay, widges        
         
    
-    #|------------------------------| 
-    #|----------- Events -----------|
-    #|------------------------------| 
+    #|------------------------------------| 
+    #|--------- Event Functions ----------|
+    #|------------------------------------| 
     def keyPressEvent(self, event):
+        """
+        Event for key press events. 
+        
+        Actions (based on key):
+            q = close a window
+            esc = close everything
+     
+        """
         if event.key() == QtCore.Qt.Key_Q: 
             self.close()
         elif event.key() == QtCore.Qt.Key_Escape:
             sys.exit()
             
     def s2b(self, x=None, b=None, dx=None, x0=None, myWF=None, widges=None):
+        """
+        Event for slider changes. Triggered on enter press, not just a text change
+        
+        Inputs:
+            x:      the integer slider value
+            b:      the box friend for this slider
+            dx:     the spacing between slider points in parameter units
+            x0:     the parameter value for slider = 0
+            myWF:   the associated wireframe
+            widges: the array with all the widges
+            * Parameters aren't optional but get passed through a lambda function like this
+        
+        Actions:
+            Sets the corresponding box to the new parameter value based on slider index
+            Updates the parameter in the wf structure, recalculates wf, and updates figs
+     
+        """
+        # Convert slider idx to parameter value
         myVal = x0+dx*x
+        # Make nice string formatting
         if dx < 0.005:
             myStr = '{:.3f}'.format(myVal) 
         else:
             myStr = '{:.2f}'.format(myVal) 
+        # Set the box value
         b.setText(myStr)
+        # Update the wirefram
         self.updateWFpoints(myWF, widges)
 
     def b2s(self,s,b, dx=None, x0=None, nSli=None, myWF=None, widges=None):
+        """
+        Event for slider changes
+        
+        Inputs:
+            x:      the text box value
+            b:      this box
+            s:      the slider friend for this box
+            dx:     the spacing between slider points in parameter units
+            x0:     the parameter value for slider = 0
+            nSli:   the number of slider points
+            myWF:   the associated wireframe
+            widges: the array with all the widges
+            * Parameters aren't optional but get passed through a lambda function like this
+        
+        Actions:
+            Sets the corresponding box to the appropriate index based on value
+            Updates the parameter in the wf structure, recalculates wf, and updates figs
+     
+        """
         temp = b.text()
+        # Convert parameter value to slider idx 
         slidx = int((float(b.text()) - x0)/dx)
+        # Make sure it is in range
+        # Readjust and print warning if not
         if slidx > nSli -1:
             slidx = nSli -1
             temp = str(x0 + (nSli-1) * dx)
@@ -323,36 +506,72 @@ class ParamWindow(QMainWindow):
             slidx = 0
             temp = str(x0)
             print('Value too low, minimum value allowed is ', x0)
+        # Set slider value    
         s.setValue(slidx)
-        # Reset it to what we actual wanted instead of slider rounded val
-        # since this will trigger s2b as it hits valueChanged
+        
+        # The above triggers s2b since the slider changes so
+        # reset it to what we actual wanted instead of slider rounded val
         b.setText(temp)
+        # Update the wirefram
         self.updateWFpoints(myWF, widges)
         
-        
     def cb_index_changed(self, a='None',idx=-10):
+        """
+        Event for wireframe combo box changes
+        
+        Inputs:
+            a:      the text box (integer) value
+            idx:    index for this wireframe
+        
+        Actions:
+            Established a new wireframe object if needed, otherwise 
+            changes the existing one to the new type
+        
+        """
         self.WFtypes[idx] = a
-
-        # Check if making a new wf
+        
+        # |---------------------------------------|
+        # |---------- Case of no prior WF --------| 
+        # |---------------------------------------|
         if type(wfs[idx].WFtype) == type(None):
+            # Make the new WF
             myType = self.WFnum2type[a]
             wfs[idx] = wf.wireframe(myType, WFidx=idx+1)
+            
+            # Change the tab name to this type
             self.tab_widget.setTabText(idx,self.WFshort[myType])
             
+            # Set up a new param layout
             WFLay, widges = self.WFparamLayout(wfs[idx])
-                        
+            
+            # Add everything to holders            
             self.layouts[idx].addLayout(WFLay, 7,0,30,11)
             self.WFLays[idx] = WFLay
             self.widges[idx] = widges
-            
+        
+        # |---------------------------------------|
+        # |-------- Case of turning WF off -------| 
+        # |---------------------------------------|    
         elif a == 0:
-            # Set back to none if didn't select a WF
+            # Create an empty none type WF
             wfs[idx] = wf.wireframe(None)
+            
+            # Change the tab name
             self.tab_widget.setTabText(idx,'None')
+            
+            # Clean the parameter layout
             thisLay = self.cleanLayout(self.WFLays[idx])
+            
+            # Turn off this wf in all plot window
             for aPW in pws:
                 aPW.scatters[idx].setData([])
-            ovw.arrows[idx].setStyle(angle=0, headWidth=0, headLen=0, tailLen=0, tailWidth=0, pxMode=False,  pen={'color': color, 'width': 0}, brush=color)    
+            # Turn off this arrow in the overview window    
+            if type(ovw) != type(None):
+                ovw.arrows[idx].setStyle(angle=0, headWidth=0, headLen=0, tailLen=0, tailWidth=0, pxMode=False,  pen={'color': color, 'width': 0}, brush=color)    
+        
+        # |---------------------------------------|
+        # |------- Switching existing type -------| 
+        # |---------------------------------------|    
         else:
             # Create a new wf object but pass it any matching
             # parameters from the previous version
@@ -379,16 +598,43 @@ class ParamWindow(QMainWindow):
            
             # Give the structure the new wf
             wfs[idx] = newWF
-            
+        
+        # |---------------------------------------|
+        # |------- Update the plot windows -------| 
+        # |---------------------------------------|    
         for aPW in pws:
+            # need to do background too bc it can get cleaned
             aPW.plotBackground()
             aPW.plotWFs(justN=idx)
             
     def back_changed(self,text):
+        """
+        Event for background combo box changes. The plot window combo box
+        event handles most of the heavy lifting. This just passed the change
+        along to each of the windows
+        
+        Inputs:
+            text: the text box (integer) value
+        
+        Actions:
+            Changes the background scaling for each plot window
+        
+        """
         for aPW in pws:
              aPW.cbox.setCurrentIndex(text)         
     
     def update_tidx(self, tval):
+        """
+        Event for time slider changes. It changes the time index for the 
+        window and just calls the basic plot function 
+        
+        Inputs:
+            tval: the time slider integer value
+        
+        Actions:
+            Changes the background time step for each plot window
+        
+        """
         # Cannot for the life of me figure out why having tval = 1
         # makes the parameter sliders appear at 0 (values and WFs ok tho)
         # Just avoid 1 so the slider starts at 2 and shift what is passed
@@ -398,28 +644,68 @@ class ParamWindow(QMainWindow):
         self.Tlabel.setText('Time selection: '+self.tlabs[tval-2])
         
     def EBclicked(self):
+        """
+        Event for clicking the exit button
+        
+        Actions:
+            Everything goes bye-bye
+        
+        """
         sys.exit()
 
     def HBclicked(self, i):
+        """
+        Event for clicking the show/hide button
+        
+        Inputs:
+            i: the wireframe index
+        
+        Actions:
+            Toggles showing/hiding a wireframe
+        
+        """
+        # If its on, turn it off
         if wfs[i].showMe: 
             wfs[i].showMe = False
+            # Hide it by setting scatter data to empty
             for aPW in pws:
                 aPW.scatters[i].setData([])
+        # If its off, turn it on
         else:
             wfs[i].showMe = True
+            # Just recalc and show the scatter points
             for aPW in pws:
                 aPW.plotWFs(justN=i)
 
     def SBclicked(self, singleSat=None):
-        # Single sat is integer corresponding to a plot window/satellite number
-        fileName = 'wombatSummaryFile.txt'
-        # Get the filename 
+        """
+        Event for clicking the save button. If called by the parameter
+        window it will save the wf parameters/reload file and images 
+        for each of the plot panels. If called by the plot panel it will
+        only doing one figure
         
+        Optional Inputs:
+            singleSat: the index of a single plot window
+        
+        Actions:
+            Saves reload file wombatSummaryFile.txt
+            Saves a png for each plot window (only at current time index)
+            Saves a png of the overview window
+            Saves fits files of the processed backgrounds (all time steps)
+        
+        """
+        
+        #|------------------------------------| 
+        #|-------- Save Reload File ----------|
+        #|------------------------------------|
+        fileName = 'wombatSummaryFile.txt'        
         outFile = open('wboutputs/'+fileName, 'w')
         print ('Saving results in wboutputs/'+fileName)
-        # Save the wireframe points
+        
+        # |----- Save the wireframe parameters ----|
         for j in range(nwfs):
             aWF = wfs[j]
+            # Only save if turned on
             if aWF.WFtype:
                 outFile.write('WFtype'+str(j+1)+': ' + str(aWF.WFtype).replace(' ','')+'\n')
                 for i in range(len(aWF.labels)):
@@ -431,34 +717,36 @@ class ParamWindow(QMainWindow):
                         outStr = thisLab+str(j+1)+': ' + str(aWF.params[i])
                     outFile.write(outStr+'\n')
                     
-        # Save the background plot info
+        # |----- Save the background parameters ----|
+        # Check if doing single sat or all
         if type(singleSat) != type(None):
             toDo = [singleSat]
         else:
             toDo = range(nSats)
+        # Look through whoever we included    
         for j in toDo:
             aPW = pws[j]
             tidx = aPW.tidx
+            # Add the names of all time steps
             for tidx in range(len(aPW.satStuff)):
                 outStr = 'ObsTime'+str(j+1)+': ' + aPW.satStuff[tidx]['DATEOBS']
                 outFile.write(outStr+'\n')
-            #if 'DATEOBS0' in aPW.satStuff[tidx]:
-            #    outStr = 'ObsTimeZero'+str(j+1)+': ' + aPW.satStuff[tidx]['DATEOBS0']
-            #    outFile.write(outStr+'\n')
-            
+            # Scaling parameters
             outStr = 'ObsType'+str(j+1)+': ' + aPW.satStuff[tidx]['MYTAG'].replace(' ','_')
-            outFile.write(outStr+'\n')
-            
+            outFile.write(outStr+'\n')            
             outStr = 'Scaling'+str(j+1)+': ' +str(aPW.sclidx)
             outFile.write(outStr+'\n')
             outStr = 'MinVal'+str(j+1)+': ' +str(aPW.MinSlider.value())
             outFile.write(outStr+'\n')
             outStr = 'MaxVal'+str(j+1)+': ' +str(aPW.MaxSlider.value())
-            outFile.write(outStr+'\n')
-        
+            outFile.write(outStr+'\n')        
         outFile.close()
 
-        # Save figures            
+        #|------------------------------------| 
+        #|---------- Save Figures ------------|
+        #|------------------------------------|
+        
+        #|--------- Save plot windows --------|         
         for j in toDo:
             aPW = pws[j]
             tidx = aPW.tidx
@@ -466,6 +754,7 @@ class ParamWindow(QMainWindow):
             figGrab = aPW.pWindow.grab()
             figGrab.save('wboutputs/'+figName)
             print ('Saving figure in wboutputs/'+figName )
+        #|------- Save overview window -------|   
         if ovw:
             figName = 'wombat_'+ pws[0].satStuff[0]['DATEOBS'].replace(':','') + '_overview.png'
             figGrab = ovw.pWindow.grab()
@@ -473,26 +762,38 @@ class ParamWindow(QMainWindow):
             print ('Saving figure in wboutputs/'+figName )
             
         
-        # Save Files
+        #|------------------------------------| 
+        #|-------- Save Fits Files -----------|
+        #|------------------------------------|        
         for j in toDo:
             aPW = pws[j]
-            tidx = aPW.tidx
+            
+            # Save a fits file for each time step
             for tidx in range(len(aPW.satStuff)):
+                # Make the name
                 fitsName = 'wombat_'+ aPW.satStuff[tidx]['DATEOBS'].replace(':','') + '_' +  aPW.satStuff[tidx]['MYTAG'].replace(' ','_') +'.fits'
+                # Check that it doesn't already exist
                 if not os.path.exists('wbfits/reloads/'+fitsName):
                     fitsdata = aPW.OGims[tidx].data               
                     fitshdr  = aPW.hdrs[tidx]
                 
-                    # Don't know why this gets tripped for some LASCO cases but making
-                    # it a string makes it happy
+                    # Special thing just for LASCO. Gets angry about 
+                    # format even though nothing we touched.
                     if 'OBT_TIME' in fitshdr:
                         fitshdr['OBT_TIME'] = str(fitshdr['OBT_TIME'])
+                    
+                    # Write it    
                     print ('Saving fits file as wbfits/reloads/'+fitsName)
                     hdu = fits.PrimaryHDU(fitsdata, header=fitshdr)
                     hdu.writeto('wbfits/reloads/'+fitsName, overwrite=True)
         
-
     def MBclicked(self):
+        """
+        Event for clicking the mass button
+        
+        Does nothing yet but working on that
+        
+        """
         print('Mass not coded yet')
             
     #|------------------------------| 
@@ -522,6 +823,9 @@ class ParamWindow(QMainWindow):
                 ovw.updateArrow(aWF.WFidx-1,color=aWF.WFcolor)
     
         
+# |------------------------------------------------------------|
+# |------------------- Figure Window Class --------------------|
+# |------------------------------------------------------------|
 class FigWindow(QWidget):
     def __init__(self, satName, myObs, myScls, satStuff, myNum=0, labelPW=True, tmap=[0]):
         super().__init__()
@@ -820,8 +1124,9 @@ class FigWindow(QWidget):
             self.pWindow.addItem(text_item2)
             
 
-
-
+# |------------------------------------------------------------|
+# |------------------ Overview Window Class -------------------|
+# |------------------------------------------------------------|
 class OverviewWindow(QWidget):
     def __init__(self, satStuff):
         super().__init__()
@@ -909,6 +1214,10 @@ class OverviewWindow(QWidget):
         elif event.key() == QtCore.Qt.Key_Escape:
             sys.exit()
 
+
+# |------------------------------------------------------------|
+# |---------------- Scale the Background Imgs -----------------|
+# |------------------------------------------------------------|
 def makeNiceMMs(obsIn, satStuffs):
     # Dictionaries that establish the scaling of things
     # Pull the desired values for each instrument
@@ -997,7 +1306,9 @@ def makeNiceMMs(obsIn, satStuffs):
         allScls.append(sclIms)
     return allScls, satStuffs
 
-    
+# |------------------------------------------------------------|
+# |----------------- Setup up satStuff dicts ------------------|
+# |------------------------------------------------------------|
 def getSatStuff(imMap, diffDate=None):
     # Set up satDict as a micro header that we will package the mask in
     # Keys are OBS, INST, MYTAG, POS, SCALE, CRPIX, WCS, SUNPIX, ONERSUN, MASK
@@ -1059,10 +1370,6 @@ def getSatStuff(imMap, diffDate=None):
     shortNames = {'Parker Solar Probe':'PSP', 'Solar Orbiter':'SolO', 'STEREO_A':'STA', 'STEREO_B':'STB', 'SOHO':'SOHO', 'SDO':'SDO'}
     satDict['SHORTNAME'] = shortNames[satDict['OBS']]
     
-    # get a color table if we can
-    if satDict['OBS'] == 'SDO':
-        ct = color_tables.aia_color_table(myhdr['WAVELNTH']*u.angstrom)
-        satDict['MYCT'] = ct
     
     # Get obs date/time
     if len(myhdr['date-obs']) > 13:
@@ -1073,13 +1380,6 @@ def getSatStuff(imMap, diffDate=None):
     if '.' in satDict['DATEOBS']:
         dotidx = satDict['DATEOBS'].find('.')
         satDict['DATEOBS'] = satDict['DATEOBS'][:dotidx]
-
-    '''if diffDate:
-        satDict['DATEOBS0'] = diffDate
-        satDict['DATEOBS0'] = satDict['DATEOBS0'].replace('/','-')
-        if '.' in satDict['DATEOBS0']:
-            dotidx = satDict['DATEOBS0'].find('.')
-            satDict['DATEOBS0'] = satDict['DATEOBS0'][:dotidx]'''
      
 
     # Get satellite info    
@@ -1175,7 +1475,9 @@ def getSatStuff(imMap, diffDate=None):
 
     return satDict
     
-    
+# |------------------------------------------------------------|
+# |----------------- Project points onto map ------------------|
+# |------------------------------------------------------------|
 def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None, printIt=False):
     #  
     # Take in a list of points and an observer location and project into pixel coordinates
@@ -1243,7 +1545,9 @@ def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None, printIt=Fals
         outs = np.array([thetax, thetay]).transpose()
     return outs
 
-
+# |------------------------------------------------------------|
+# |--------------- Set up GUI from reload file ----------------|
+# |------------------------------------------------------------|
 def reloadIt(rD):
     # Set the wf params
     for i in range(nwfs):
@@ -1278,6 +1582,9 @@ def reloadIt(rD):
         pws[i].MinSlider.setValue(myMin)
         pws[i].MaxSlider.setValue(myMax)
     
+# |------------------------------------------------------------|
+# |-------------------- Setup Time Indices --------------------|
+# |------------------------------------------------------------|
 def sortTimeIndices(satStuff, tRes=20):
     # Set a default range of 20 minutes
     
@@ -1345,7 +1652,24 @@ def sortTimeIndices(satStuff, tRes=20):
   
     return nTimes, tlabs, tmaps
 
+# |------------------------------------------------------------|
+# |------------------- Main Launch Function -------------------|
+# |------------------------------------------------------------|
 def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadDict=None):
+    # Maintain a limited number of global variables to make passing things easier
+    # (had to move into releaseTheWombats after function-ifying)
+    # main window = the parameter window
+    # pws = array of plot windows
+    # wfs = array of wireframes in theoryland coords
+    # bmodes = array of integer background scaling modes, defaults to linear = 0
+    #global mainwindow, pws, nSats, wfs, nwfs, bmodes
+    
+    global occultDict, WFname2id
+    # Nominal radii (in Rs) for the occulters for each instrument. Pulled from google so 
+    # generally correct (hopefully) but not the most precise
+    occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.5,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215], 'STEREO_SECCHI_EUVI':[0,1.7],'SDO_AIA':[0,1.35]} 
+    WFname2id = {'GCS':1, 'Torus':2, 'Sphere':3, 'Half Sphere':4, 'Ellipse':5, 'Half Ellipse':6, 'Slab':7}
+    
     
     global mainwindow, pws, nSats, wfs, nwfs, bmodes, ovw
     
@@ -1434,33 +1758,3 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
 
     sys.exit(app.exec_())
     
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    global mainwindow, pws, nSats, wfs, nwfs, bmodes
-    
-    '''screen = app.primaryScreen()
-    size = screen.size()
-    width, height = size.width(), size.height()
-    print (width, height)'''
-    
-    nwfs = 3
-
-    wfs = [wf.wireframe(None) for i in range(nwfs)]
-    
-    pws = []
-    pw = FigWindow('Sat1')
-    pw.show()
-    pws.append(pw)
-    pw = FigWindow('Sat2', myNum=1)
-    pw.show()
-    pws.append(pw)
-    nSats = len(pws)
-    
-
-    mainwindow = ParamWindow(3)
-    mainwindow.show()
-
-
-    sys.exit(app.exec_())
