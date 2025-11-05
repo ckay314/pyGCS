@@ -101,7 +101,8 @@ def setupTimeStuff(times):
     Function to convert pair of strings in times into useful other variables
 
     Inputs:
-        times: an array with [startTime, endTime] where both
+        times: an array with [startTime, endTime] in any string format accepted by 
+               parse_time (from sunpy)
      
     Outputs:
         ymds: an array of dates within the time range in the format YYYYMMDD
@@ -110,8 +111,16 @@ def setupTimeStuff(times):
 
     """    
     # Convert strings to astropy time objects
-    startAPT = parse_time(startT)
-    endAPT = parse_time(endT)
+    startT = times[0]
+    endT   = times[1]
+    try:
+        startAPT = parse_time(startT)
+    except:
+        sys.exit('Error in starting time format. Need any format accepted by sunpy parse_time')
+    try:
+        endAPT = parse_time(endT)
+    except:
+        sys.exit('Error in ending time format. Need any format accepted by sunpy parse_time')
 
     # |----------------------------------|
     # |-------- Get Day of Year ---------|
@@ -379,8 +388,8 @@ def processLASCO(times, insts, inFolder='pullFolder/SOHO/LASCO/', outFolder='wbF
     # |----------------------------------|                    
     outLines = []   
     # Sort and array-ify
-    goodFiles[0] = np.sort(np.array(goodFiles[0]))
-    goodFiles[1] = np.sort(np.array(goodFiles[1]))
+    for i in range(nInsts):
+        goodFiles[i] = np.sort(np.array(goodFiles[i]))
     
     # Add in the actual processing, saving, and output to runFile  
     print ('|---- Processing LASCO ----|')
@@ -400,6 +409,7 @@ def processLASCO(times, insts, inFolder='pullFolder/SOHO/LASCO/', outFolder='wbF
                 hdrs[j]['OBSRVTRY'] = 'SOHO'
                 # Save the fits file
                 fullOut = outFolder+insts[i]+'/'+fitsName
+                print (fullOut)
                 fits.writeto(fullOut, ims[j], hdrs[j], overwrite=True)
                 outLines.append(fullOut+'\n')
                            
@@ -894,7 +904,7 @@ def processWISPR(times, insts, inFolder='pullFolder/PSP/WISPR/', outFolder='wbFi
             outLines.append('WISPR_'+ insts[i] + '\n')
             for j in range(len(ims)):
                 ymd = hdrs[j]['DATE-OBS'].replace('-','').replace(':','')[:15]  
-                fitsName = 'wbpro_wisp'+insts[i]+'_'+ymd+'.fits'
+                fitsName = 'wbpro_wispr'+insts[i]+'_'+ymd+'.fits'
                 fullName = outFolder+insts[i]+'/' + fitsName
                 fits.writeto(fullName, ims[j], hdrs[j], overwrite=True)
                 outLines.append(fullName+'\n')
@@ -1104,8 +1114,9 @@ def processObs(times, insts, inFolder='pullFolder/', outFolder='wbFits/', outFil
         
 
 if __name__ == '__main__':
-    startT = '2012/07/12T16:00'
-    endT   = '2012/07/12T22:00'
+    startT = '2023/09/24T16:00'
+    endT   = '2023/09/24T20:00'
+    
     times = [startT, endT]
-    sats  = ['COR1']
+    sats  = [ 'WISPR']
     processObs(times, sats)

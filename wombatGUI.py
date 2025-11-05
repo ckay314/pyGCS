@@ -40,7 +40,6 @@ global occultDict, WFname2id
 # generally correct (hopefully) but not the most precise
 occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.5,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215], 'STEREO_SECCHI_EUVI':[0,1.7],'SDO_AIA':[0,1.35]} 
 WFname2id = {'GCS':1, 'Torus':2, 'Sphere':3, 'Half Sphere':4, 'Ellipse':5, 'Half Ellipse':6, 'Slab':7}
-
         
 class ParamWindow(QMainWindow):
     def __init__(self, nTabs, tlabs=None):
@@ -107,18 +106,21 @@ class ParamWindow(QMainWindow):
         
         # Time slider/label
         if self.nTsli > 0:
-            Tlabel = QLabel('Time selection: '+self.tlabs[0])
+            myTlab = 'Time selection: '+self.tlabs[0]
+            Tlabel = QLabel(myTlab)
         else:
             Tlabel = QLabel('Single Time Given')
         self.Tlabel = Tlabel
         layout.addWidget(Tlabel,0,0,1,10,alignment=QtCore.Qt.AlignLeft)
         
-        slider1 = QSlider()
+        Tslider1 = QSlider()
         #slider1.setGeometry(QtCore.QRect(0, 100, 160, 25))
-        slider1.setOrientation(QtCore.Qt.Horizontal)
-        slider1.setRange(0,self.nTsli)
-        slider1.valueChanged.connect(self.update_tidx)
-        layout.addWidget(slider1, 1,0,1,11)
+        Tslider1.setOrientation(QtCore.Qt.Horizontal)
+        # Slider doesn't like the number 1 for no apparent reason
+        # so easiest just to avoid
+        Tslider1.setRange(2,self.nTsli+2)
+        Tslider1.valueChanged.connect(self.update_tidx)
+        layout.addWidget(Tslider1, 1,0,1,11)
 
 
         label = QLabel('Wireframe Type')
@@ -310,8 +312,6 @@ class ParamWindow(QMainWindow):
         b.setText(myStr)
         self.updateWFpoints(myWF, widges)
 
-    #def b2s(self, x=None, s=None):
-    #    s.setValue(int(x))
     def b2s(self,s,b, dx=None, x0=None, nSli=None, myWF=None, widges=None):
         temp = b.text()
         slidx = int((float(b.text()) - x0)/dx)
@@ -388,12 +388,15 @@ class ParamWindow(QMainWindow):
         for aPW in pws:
              aPW.cbox.setCurrentIndex(text)         
     
-    def update_tidx(self, value):
-        self.Tlabel.setText('Time selection: '+self.tlabs[value])
+    def update_tidx(self, tval):
+        # Cannot for the life of me figure out why having tval = 1
+        # makes the parameter sliders appear at 0 (values and WFs ok tho)
+        # Just avoid 1 so the slider starts at 2 and shift what is passed
         for aPW in pws:
-            aPW.tidx = aPW.st2obs[value]
-            aPW.plotBackground()     
-    
+            aPW.tidx = aPW.st2obs[tval-2]
+            aPW.plotBackground()    
+        self.Tlabel.setText('Time selection: '+self.tlabs[tval-2])
+        
     def EBclicked(self):
         sys.exit()
 
@@ -418,7 +421,7 @@ class ParamWindow(QMainWindow):
         for j in range(nwfs):
             aWF = wfs[j]
             if aWF.WFtype:
-                outFile.write('WFtype'+str(j+1)+': ' + str(aWF.WFtype)+'\n')
+                outFile.write('WFtype'+str(j+1)+': ' + str(aWF.WFtype).replace(' ','')+'\n')
                 for i in range(len(aWF.labels)):
                     thisLab = aWF.labels[i]
                     spIdx = thisLab.find(' ')
@@ -436,13 +439,14 @@ class ParamWindow(QMainWindow):
         for j in toDo:
             aPW = pws[j]
             tidx = aPW.tidx
-            outStr = 'ObsTime'+str(j+1)+': ' + aPW.satStuff[tidx]['DATEOBS']
-            outFile.write(outStr+'\n')
-            if 'DATEOBS0' in aPW.satStuff[tidx]:
-                outStr = 'ObsTimeZero'+str(j+1)+': ' + aPW.satStuff[tidx]['DATEOBS0']
+            for tidx in range(len(aPW.satStuff)):
+                outStr = 'ObsTime'+str(j+1)+': ' + aPW.satStuff[tidx]['DATEOBS']
                 outFile.write(outStr+'\n')
+            #if 'DATEOBS0' in aPW.satStuff[tidx]:
+            #    outStr = 'ObsTimeZero'+str(j+1)+': ' + aPW.satStuff[tidx]['DATEOBS0']
+            #    outFile.write(outStr+'\n')
             
-            outStr = 'ObsType'+str(j+1)+': ' + aPW.satStuff[tidx]['MYTAG']
+            outStr = 'ObsType'+str(j+1)+': ' + aPW.satStuff[tidx]['MYTAG'].replace(' ','_')
             outFile.write(outStr+'\n')
             
             outStr = 'Scaling'+str(j+1)+': ' +str(aPW.sclidx)
@@ -458,12 +462,12 @@ class ParamWindow(QMainWindow):
         for j in toDo:
             aPW = pws[j]
             tidx = aPW.tidx
-            figName = 'wombat_'+ aPW.satStuff[tidx]['DATEOBS'] + '_' +  aPW.satStuff[tidx]['MYTAG'] +'.png'
+            figName = 'wombat_'+ aPW.satStuff[tidx]['DATEOBS'].replace(':','') + '_' +  aPW.satStuff[tidx]['MYTAG'].replace(' ','_') +'.png'
             figGrab = aPW.pWindow.grab()
             figGrab.save('wboutputs/'+figName)
             print ('Saving figure in wboutputs/'+figName )
         if ovw:
-            figName = 'wombat_'+ pws[0].satStuff[0]['DATEOBS'] + '_overview.png'
+            figName = 'wombat_'+ pws[0].satStuff[0]['DATEOBS'].replace(':','') + '_overview.png'
             figGrab = ovw.pWindow.grab()
             figGrab.save('wboutputs/'+figName)
             print ('Saving figure in wboutputs/'+figName )
@@ -473,18 +477,19 @@ class ParamWindow(QMainWindow):
         for j in toDo:
             aPW = pws[j]
             tidx = aPW.tidx
-            fitsName = 'wombat_'+ aPW.satStuff[tidx]['DATEOBS'] + '_' +  aPW.satStuff[tidx]['MYTAG'] +'.fits'
-            if not os.path.exists('wbfits/'+fitsName):
-                fitsdata = aPW.OGims[tidx].data               
-                fitshdr  = aPW.hdrs[tidx]
+            for tidx in range(len(aPW.satStuff)):
+                fitsName = 'wombat_'+ aPW.satStuff[tidx]['DATEOBS'].replace(':','') + '_' +  aPW.satStuff[tidx]['MYTAG'].replace(' ','_') +'.fits'
+                if not os.path.exists('wbfits/reloads/'+fitsName):
+                    fitsdata = aPW.OGims[tidx].data               
+                    fitshdr  = aPW.hdrs[tidx]
                 
-                # Don't know why this gets tripped for some LASCO cases but making
-                # it a string makes it happy
-                if 'OBT_TIME' in fitshdr:
-                    fitshdr['OBT_TIME'] = str(fitshdr['OBT_TIME'])
-                print ('Saving fits file as wbfits/'+fitsName)
-                hdu = fits.PrimaryHDU(fitsdata, header=fitshdr)
-                hdu.writeto('wbfits/'+fitsName, overwrite=True)
+                    # Don't know why this gets tripped for some LASCO cases but making
+                    # it a string makes it happy
+                    if 'OBT_TIME' in fitshdr:
+                        fitshdr['OBT_TIME'] = str(fitshdr['OBT_TIME'])
+                    print ('Saving fits file as wbfits/reloads/'+fitsName)
+                    hdu = fits.PrimaryHDU(fitsdata, header=fitshdr)
+                    hdu.writeto('wbfits/reloads/'+fitsName, overwrite=True)
         
 
     def MBclicked(self):
@@ -736,7 +741,31 @@ class FigWindow(QWidget):
                     toShow = toShow[::2]
                     myColor = '#C81CDE'
                     occultR = 1. * self.satStuff[self.tidx]['ONERSUN']
-                
+                    
+                # Check if the satellite is in the WF for HI bcs points
+                # get weird so at least change color to warn this is the case
+                if self.satStuff[self.tidx]['OBSTYPE'] == 'HI':
+                    myPos = self.satStuff[self.tidx]['POS']
+                    myR = myPos[2] / 7e8
+                    pts = wfs[i].points
+                    maxR = np.max(np.sqrt(pts[:,0]**2 + pts[:,1]**2 + pts[:,2]**2))
+                    AW = None
+                    if 'AW (deg)' in wfs[i].labels:
+                        AWidx = np.where(wfs[i].labels == 'AW (deg)')
+                        AW = wfs[i].params[AWidx][0]
+                    elif 'AW_FO (deg)' in wfs[i].labels:
+                        AWidx = np.where(wfs[i].labels == 'AW_FO (deg)')
+                        AW = wfs[i].params[AWidx][0]
+                    # add slab options
+                    
+                    if AW:
+                        if myR < maxR:
+                            satLon, wflon = myPos[1], wfs[i].params[1]
+                            if np.abs(satLon - wflon) < AW:
+                                myColor = '#C81CDE'
+                            
+                    inFoV = 32
+                            
                 for jj in toShow:
                     pt = wfs[i].points[jj,:]
                     r = np.sqrt(pt[0]**2 + pt[1]**2 + pt[2]**2)
@@ -745,8 +774,23 @@ class FigWindow(QWidget):
                     pt = [lat, lon, r*7e8]
                     if flatEUV:
                         pt = [lat, lon, 7e8]
-                    myPt = pts2proj(pt, obs, obsScl, mywcs, center=cent, occultR=occultR)
-                   
+                    
+                    # WISPR outer (at least) has issues in pts projection when CME
+                    # is behind the satellite. The projection code matches IDL so unclear
+                    # what the original issue is but not a porting issue. Work around
+                    # by just checking if a point is behind the sat lon   
+                    if 'WISPR' in self.satStuff[self.tidx]['MYTAG']:  
+                        dLon = lon - myPos[1]
+                        if dLon < -180:
+                            dLon +=360
+                        if dLon > 0:
+                            myPt = pts2proj(pt, obs, obsScl, mywcs, center=cent, occultR=occultR)
+                        else:
+                            myPt = []
+                    else:
+                        myPt = pts2proj(pt, obs, obsScl, mywcs, center=cent, occultR=occultR)
+                    
+                    # If the point is in the FoV add it to draw    
                     if len(myPt) > 0:          
                         pos.append({'pos': [myPt[0][0], myPt[0][1]], 'pen':{'color':myColor, 'width':penwid}, 'brush':pg.mkBrush(myColor)})
                         
@@ -957,7 +1001,7 @@ def makeNiceMMs(obsIn, satStuffs):
 def getSatStuff(imMap, diffDate=None):
     # Set up satDict as a micro header that we will package the mask in
     # Keys are OBS, INST, MYTAG, POS, SCALE, CRPIX, WCS, SUNPIX, ONERSUN, MASK
-    # OCCRPIX, OCCRARC, SUNCIRC, SUNNORTH, OBSTYPE, FOV, DATEOBS, DATEOBS0
+    # OCCRPIX, OCCRARC, SUNCIRC, SUNNORTH, OBSTYPE, FOV, DATEOBS
     satDict = {}
     
     # Get the name 
@@ -1030,12 +1074,12 @@ def getSatStuff(imMap, diffDate=None):
         dotidx = satDict['DATEOBS'].find('.')
         satDict['DATEOBS'] = satDict['DATEOBS'][:dotidx]
 
-    if diffDate:
+    '''if diffDate:
         satDict['DATEOBS0'] = diffDate
         satDict['DATEOBS0'] = satDict['DATEOBS0'].replace('/','-')
         if '.' in satDict['DATEOBS0']:
             dotidx = satDict['DATEOBS0'].find('.')
-            satDict['DATEOBS0'] = satDict['DATEOBS0'][:dotidx]
+            satDict['DATEOBS0'] = satDict['DATEOBS0'][:dotidx]'''
      
 
     # Get satellite info    
@@ -1132,7 +1176,7 @@ def getSatStuff(imMap, diffDate=None):
     return satDict
     
     
-def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None):
+def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None, printIt=False):
     #  
     # Take in a list of points and an observer location and project into pixel coordinates
     # Expect pts as [lat, lon, r] in [deg, deg, x] where x doesn't matter as long as consistent
@@ -1151,8 +1195,7 @@ def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None):
     
     if len(pts_in.shape) == 1:
         pts_in = np.array([pts_in])
-    
-    
+        
     # convert all the pts to radians
     pts_lats = pts_in[:,0]*dtor 
     pts_lons = pts_in[:,1]*dtor 
@@ -1171,7 +1214,7 @@ def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None):
     x = pts_rs  * np.cos(pts_lats) * np.sin(dLon)
     y = pts_rs * (np.sin(pts_lats) * np.cos(obs_lat) - np.cos(pts_lats)*np.cos(dLon)*np.sin(obs_lat))
     z = pts_rs * (np.sin(pts_lats) * np.sin(obs_lat) + np.cos(pts_lats)*np.cos(dLon)*np.cos(obs_lat))
-        
+            
     # Convert to projected vals
     d = np.sqrt(x**2 +  y**2 + (obs_r-z)**2)
     if mywcs['cunit'][0].lower() == 'arcsec':
@@ -1179,9 +1222,10 @@ def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None):
     elif mywcs['cunit'][0].lower() == 'deg':
         rad2unit = 180. / np.pi
     dthetax = np.arctan2(x, obs_r - z) * rad2unit 
-    dthetay = np.arcsin(y/d)* rad2unit 
-        
+    dthetay = np.arcsin(y/d)* rad2unit  
+    
     coord = wcs_get_pixel(mywcs, [dthetax, dthetay], doQuick=False)
+
     
     # Check if we want to throw out the points that would be behind the occulter
     outs = np.array([coord[0,:], coord[1,:]]).transpose()
@@ -1297,7 +1341,6 @@ def sortTimeIndices(satStuff, tRes=20):
             myDTdiff = np.abs(myTimes-DTgeneral[i])
             mygenidx = np.where(myDTdiff == np.min(myDTdiff))[0]
             st2obs[i] = mygenidx[0]
-        
         tmaps.append(st2obs)
   
     return nTimes, tlabs, tmaps
@@ -1327,7 +1370,7 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
         if tNum > 1:
             multiTime = True
         for j in range(tNum): 
-            mySatStuff = getSatStuff(obsFiles[i][0][j], diffDate=obsFiles[i][1][j]['DATE-OBS0'])
+            mySatStuff = getSatStuff(obsFiles[i][0][j])
             someStuff.append(mySatStuff)
             
         mySclIms, someStuff = makeNiceMMs(obsFiles[i], someStuff)    

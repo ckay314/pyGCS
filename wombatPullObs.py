@@ -216,9 +216,7 @@ def pullLASCO(times, insts, CORtime=20, outFolder='pullFolder/'):
             print('Downloading LASCO C2 files...')
             c2path = outFolder + 'SOHO/LASCO/C2/'
             for i in range(len(whichC[0])):
-                print (c2path + ymdts[0][i])
                 downloaded_files = Fido.fetch(result[0,whichC[0][i]], path= c2path + ymdts[0][i] + '_C2_{file}') 
-            print (downloaded_files)
         else:
             print('Cannot find any files for LASCO C2')
     # LASCO C3         
@@ -835,10 +833,10 @@ def pullObs(times, insts, outFolder='pullFolder/', EUVtime=10, CORtime=20, HItim
         
 
 if __name__ == '__main__':
-    startT = '2012/07/12T16:00'
-    endT   = '2012/07/12T22:00'
+    startT = '2023/09/24T16:00'
+    endT   = '2023/09/24T18:00'
     
     times = [startT, endT]
-    sats  = [ 'COR1']
-    pullObs(times, sats, CORtime=10)
+    sats  = [ 'AIA171']
+    pullObs(times, sats, EUVtime=20)
             
