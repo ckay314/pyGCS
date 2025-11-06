@@ -84,7 +84,7 @@ from astropy.time import TimeDelta
 from sunpy.time import parse_time
 
 
-sys.path.append('/Users/kaycd1/STEREO_Mass/IDLport') 
+sys.path.append('prepCode/') 
 from secchi_prep import secchi_prep
 from wispr_prep import wispr_prep
 from lasco_prep import c2_prep, c3_prep

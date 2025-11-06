@@ -75,9 +75,7 @@ External Calls:
 
 from astropy.io import fits
 import astropy.units as u
-from pyGCS import *
-from GCSgui import *
-from scipy import ndimage
+import numpy as np
 import sunpy.map
 from sunpy.time import parse_time
 import sys, os

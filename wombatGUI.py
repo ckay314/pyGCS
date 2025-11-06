@@ -42,7 +42,7 @@ import wombatWF as wf
 from wombatLoadCTs import *
 
 # This will need to be updated to local folder eventually
-sys.path.append('/Users/kaycd1/STEREO_Mass/IDLport') 
+sys.path.append('prepCode/') 
 from wcs_funs import fitshead2wcs, wcs_get_pixel, wcs_get_coord
 
 # |------------------------------------------------------------|

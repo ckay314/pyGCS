@@ -139,10 +139,10 @@ def rotz(vec, ang):
     Rotate a 3D vector by ang (input in degrees) about the z-axis 
     
     """
-	ang *= dtor
-	xout = np.cos(ang) * vec[0] - np.sin(ang) * vec[1]
-	yout = np.sin(ang) * vec[0] + np.cos(ang) * vec[1]
-	return [xout, yout, vec[2]]
+    ang *= dtor
+    xout = np.cos(ang) * vec[0] - np.sin(ang) * vec[1]
+    yout = np.sin(ang) * vec[0] + np.cos(ang) * vec[1]
+    return [xout, yout, vec[2]]
 
 def SPH2CART(sph_in):
     """
