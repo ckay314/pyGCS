@@ -652,17 +652,18 @@ def runWombat(args, overviewPlot=True):
     diffMode = 'RD'
     tRes = None
     toRm = 0
-    for i in [-1,-2]:
-        val = args[i]
-        if val.upper() in ['BD', 'RD']:
-            diffMode = val.upper()
-            toRm +=1
-        else:
-            try: 
-                tRes = int(val)
+    if len(args) > 1:
+        for i in [-1,-2]:
+            val = args[i]
+            if val.upper() in ['BD', 'RD']:
+                diffMode = val.upper()
                 toRm +=1
-            except:
-                pass
+            else:
+                try: 
+                    tRes = int(val)
+                    toRm +=1
+                except:
+                    pass
     if toRm > 0:
         args = args[:-toRm]
     
@@ -672,7 +673,7 @@ def runWombat(args, overviewPlot=True):
     # Check if we were passed a file
     # Could be either a reload file or a list of pre processed obs
     if len(args) == 1:
-        theFile = args[1]
+        theFile = args[0]
     
         doReload = False
         preProc  = False
@@ -724,7 +725,7 @@ def runWombat(args, overviewPlot=True):
     # |-----------------------------------------------|
     # |----------- Launch the WOMBAT GUI -------------|
     # |-----------------------------------------------|    
-    releaseTheWombat(allFH, reloadDict=reloadDict, overviewPlot=overviewPlot)   
+    releaseTheWombat(allFH, reloadDict=reloadDict, overviewPlot=overviewPlot, nWFs=2)   
         
 if __name__ == '__main__':
     runWombat(sys.argv, overviewPlot=True)

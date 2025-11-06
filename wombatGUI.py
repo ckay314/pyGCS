@@ -107,7 +107,7 @@ class ParamWindow(QMainWindow):
         
         # Window size and name    
         self.setWindowTitle('Wombat Parameters')
-        self.setGeometry(100, 100, 300, 950)
+        self.setGeometry(10, 10, 300, 950)
         self.setFixedSize(300, 950) 
 
         # Create a QTabWidget
@@ -598,6 +598,27 @@ class ParamWindow(QMainWindow):
             # Give the structure the new wf
             wfs[idx] = newWF
         
+        # |--------------------------------------------|
+        # |------- Check for existing same type -------| 
+        # |--------------------------------------------| 
+        if a !=0:
+            allTypes = [wfs[i].WFtype for i in range(len(wfs))]
+            allColors = []
+            for i in range(len(allTypes)):
+                if type(allTypes[i]) != type(None):
+                    allColors.append(wfs[i].WFcolor)
+            allColors = np.array(allColors)
+            if len(np.where(allColors == wfs[idx].WFcolor)[0]) > 1:
+                icol = 0
+                while icol < len(wf.bonusColors):
+                    if wf.bonusColors[icol] not in allColors:
+                        wfs[idx].WFcolor = wf.bonusColors[icol]
+                        icol = 9999
+                    else:
+                        icol += 1
+                    
+            
+         
         # |---------------------------------------|
         # |------- Update the plot windows -------| 
         # |---------------------------------------|    
@@ -886,7 +907,7 @@ class FigWindow(QWidget):
     
      
     """
-    def __init__(self, myObs, myScls, satStuff, myNum=0, labelPW=True, tmap=[0]):
+    def __init__(self, myObs, myScls, satStuff, myNum=0, labelPW=True, tmap=[0], screenXY=None):
         """
         Intial setup for the figure window class.
     
@@ -917,6 +938,8 @@ class FigWindow(QWidget):
                       map to 5 observational indices. Also helps adjust for different
                       time resolution for different instruments.
         
+            screenXY: resolution of the computer monitor. used to place windows nicer
+        
         External Calls:
             check4CT from wombatLoadCTs
      
@@ -936,7 +959,36 @@ class FigWindow(QWidget):
         self.st2obs = tmap # slider time to obs index
         
         #|---- Set up/name window ----|
-        self.setGeometry(550*(myNum+1), 350, 350, 450) 
+        if type(screenXY) == type(None):
+            self.setGeometry(550*(myNum+1), 350, 450, 450) 
+        else:
+            pWinWid = 10 + 300 +50
+            remWid  = screenXY[0] - pWinWid
+            myWid = 475
+            # Check if we can fit across
+            if remWid > nSats * myWid:
+                myx = 350 + myWid * myNum
+                self.setGeometry(myx, 350, 350, 450) 
+            # Else start stacking
+            else:
+                # Figure out max we can put in a row
+                nRow = int(remWid / myWid)
+                
+                # Fill up top row
+                if myNum < nRow:
+                    myx = 350 + myWid * myNum
+                    print ('  ', myNum, myx, 10)
+                    self.setGeometry(myx, 10, 350, 450)
+                
+                # Add remaining to bottom
+                else:
+                    subNum = myNum - nRow
+                    myx = 350 + myWid * subNum
+                    myy = int(screenXY[1] / 2)
+                    print ('  ', myNum, subNum, myx, myy)
+                    self.setGeometry(myx, myy, 350, 450)
+                
+                
         self.setWindowTitle(self.satName.replace('_',''))        
         
         #|---- Make a layout ----|
@@ -1220,7 +1272,7 @@ class FigWindow(QWidget):
                 obsScl = [self.satStuff[self.tidx]['SCALE'], self.satStuff[self.tidx]['SCALE']]
                 if self.satStuff[self.tidx]['OBSTYPE'] == 'HI':
                     obsScl = [self.satStuff[self.tidx]['SCALE'] * 3600, self.satStuff[self.tidx]['SCALE'] * 3600]
-                cent = self.satStuff[self.tidx]['SUNPIX']
+                #cent = self.satStuff[self.tidx]['SUNPIX']
                 # Occulter info
                 if 'OCCRARC' in self.satStuff[self.tidx]:
                     occultR = self.satStuff[self.tidx]['OCCRARC']
@@ -1309,13 +1361,13 @@ class FigWindow(QWidget):
                         if dLon < -180:
                             dLon +=360
                         if dLon > 0:
-                            myPt = pts2proj(pt, obs, obsScl, mywcs, center=cent, occultR=occultR)
+                            myPt = pts2proj(pt, obs, obsScl, mywcs,  occultR=occultR)
                         else:
                             myPt = []
                             
                     # Just calc all non wispr cases        
                     else:
-                        myPt = pts2proj(pt, obs, obsScl, mywcs, center=cent, occultR=occultR)
+                        myPt = pts2proj(pt, obs, obsScl, mywcs, occultR=occultR)
                     
                     # If the point is in the FoV add it to draw    
                     if len(myPt) > 0:          
@@ -1412,6 +1464,9 @@ class OverviewWindow(QWidget):
         #|---- Set up scatters for sats ----|
         self.scatters = []
         self.satLabs = []
+        self.satStrings = []
+        self.satxys = []
+        L1counter = 0
         for i in range(nSats):
             #|---- Get a proj sat loc ----|
             myPos = satStuff[i][pws[i].tidx]['POS']
@@ -1431,15 +1486,33 @@ class OverviewWindow(QWidget):
             #|---- Add to window ----|
             self.pWindow.addItem(aScat)
             
-            #|---- Print sat name ----|
-            # Want to change this to legend, TBD
+            #|---- Label each sat ----|
+            # Labeling sats not insts to avoid overload
             myName = satStuff[i][0]['SHORTNAME']
-            text_item = pg.TextItem(myName, anchor=(0.5, 0.5))
-            ysat = - 0.85*myR * np.cos(myLon)
-            xsat = 0.85*myR * np.sin(myLon)
-            text_item.setPos(xsat, ysat)
-            self.satLabs.append(text_item)
-            self.pWindow.addItem(text_item)
+            
+            if myName not in self.satStrings:
+                text_item = pg.TextItem(myName, anchor=(0.5, 0.5))
+                # inner cases
+                if myR < 0.8:
+                    xsat = myR * np.sin(myLon) + 0.15
+                    ysat =  -myR * np.cos(myLon)
+                # L1 cases
+                elif np.abs(myLon) < np.pi / 6:
+                    xsat = myR * np.sin(myLon)
+                    if L1counter == 0:
+                        ysat = -1.1
+                    else:
+                        ysat = -0.95 + L1counter * 0.1
+                    L1counter +=1
+                # Other cases prob ok with this?               
+                else:
+                    ysat = - 0.85*myR * np.cos(myLon)
+                    xsat = 0.85*myR * np.sin(myLon)
+                text_item.setPos(xsat, ysat)
+                self.satLabs.append(text_item)
+                self.pWindow.addItem(text_item)
+                self.satStrings.append(myName)
+                self.satxys.append([xsat, ysat])
         
         #|---- Set up arrow for the WF lons ----|
         self.arrows = []
@@ -2317,7 +2390,10 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
     #|---- Launch Application -----|
     #|-----------------------------|
     app = QApplication(sys.argv)
-    
+    # Get size to use for window placement
+    screen = app.primaryScreen()
+    size = screen.availableGeometry()
+    screenXY = [size.width(), size.height()]
 
     #|------------------------------| 
     #|---- Launch Plot Windows -----|
@@ -2328,7 +2404,7 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
             myTmap = tmaps[i]
         else:
             myTmap = [0]
-        pw = FigWindow(obsFiles[i], sclIms[i], satStuff[i], myNum=i, labelPW=labelPW, tmap=myTmap)
+        pw = FigWindow(obsFiles[i], sclIms[i], satStuff[i], myNum=i, labelPW=labelPW, tmap=myTmap, screenXY=screenXY)
         pw.show()
         pws.append(pw) 
     

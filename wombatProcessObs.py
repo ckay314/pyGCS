@@ -646,9 +646,21 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
     STEREOfiles = [[[], []] for i in range(nInsts)]
     
     AB = ['A', 'B']
+    ABtoDo = [range(2) for i in range(nInsts)]
+    # Check if passed specifically A or B in each inst
+    # and change check list but rm tag from inst name 
+    # bc originally coded to just search for both
+    for i in range(nInsts):
+        if 'A' in insts[i]:
+            ABtoDo[i] = [0]
+            insts[i] = insts[i].replace('A','')
+        elif 'B' in insts[i]:
+            ABtoDo[i] = [1]
+            insts[i] = insts[i].replace('B','')
+    
     for i in range(nInsts):
         inst = insts[i]
-        for j in range(2):
+        for j in ABtoDo[i]:
             if 'EUVI' in inst:
                 myFold = inFolder+inst.replace('EUVI', 'EUVI'+AB[j]+'/')
             else:
@@ -675,8 +687,8 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
     goodFiles = [[[],[]] for i in range(nInsts)]
     for i in range(nInsts):
         inst = insts[i]
-        # Loop through A/B    
-        for k in range(2):
+        # Loop through A/B 
+        for k in ABtoDo[i]:
             if 'EUVI' in inst:
                 myFold = inFolder+inst.replace('EUVI', 'EUVI'+AB[k]+'/')
             else:
@@ -702,7 +714,7 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
     # Make sure we found something in the date range before moving on
     nFound = 0
     for i in range(nInsts):
-        for j in range(2):
+        for j in ABtoDo[i]:
             nFound += len(goodFiles[i][j])
     # Return if nothing found
     if nFound == 0:
@@ -711,7 +723,7 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
     
     # Make an array and sorted 
     for i in range(nInsts):
-        for j in range(2):
+        for j in ABtoDo[i]:
             goodFiles[i][j] = np.sort(np.array(goodFiles[i][j]))
     
     # |----------------------------------|
@@ -728,7 +740,7 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
         inst = insts[i]
         # Anyone thats not a pB triplet
         if inst != 'COR1':
-            for j in range(2):
+            for j in ABtoDo[i]:
                 if len(goodFiles[i][j]) > 0:
                     print ('|--- Processing STEREO '+inst+' '+AB[j]+' ---|')
                     outLines.append(fronts[j]+inst.replace('EUVI','EUVI_')+'\n')
@@ -746,7 +758,7 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
 
         # Process the triplets
         else:
-            for j in range(2):
+            for j in ABtoDo[i]:
                 myCOR = 'COR1'+AB[j]
                 # Need to check on making triples, missing files will cause isses
                 
@@ -785,26 +797,7 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
                         fullName = nowFold + '/' + fitsName   
                         fits.writeto(fullName, ims[k], hdrs[k], overwrite=True)
                         outLines.append(fullName+'\n')
-                        
-                    
-                    
-                
-                #print (len(goodFiles[i][j]))
-                '''if (len(goodFiles[i][j]) > 0) &  ((len(goodFiles[i][j]) % 3) == 0):
-                    ims, hdrs = [], []
-                    print ('|---- Processing '+ str(int(len(goodFiles[i][j])/3)) +' triplets for COR1'+AB[j]+' ----|')
-                    outLines.append(fronts[j]+inst+'\n')
-                    for k in range(int(len(goodFiles[i][j])/3)):
-                        print ('      on triplet ' +str(1+k))
-                        aIm, aHdr = secchi_prep(goodFiles[i][j][3*k:3*(k+1)], polarizeOn=True, silent=True)
-                        ims.append(aIm[0])
-                        hdrs.append(aHdr[0])
-                        ymd = hdrs[k]['DATE-OBS'].replace('-','').replace(':','')[:15]  
-                        fitsName = fronts2[j]+inst.lower()+'_'+ymd+'.fits' 
-                        nowFold = outFolder+inst+AB[j] 
-                        fullName = nowFold + '/' + fitsName   
-                        fits.writeto(fullName, ims[k], hdrs[k], overwrite=True)
-                        outLines.append(fullName+'\n')'''                                                   
+                                                                          
     return outLines
     
 
@@ -990,7 +983,7 @@ def processObs(times, insts, inFolder='pullFolder/', outFolder='wbFits/', outFil
     # |---------------------------------------| 
     # |---- Check all inst keys are valid ----|
     # |---------------------------------------| 
-    goods = ['AIA94', 'AIA131', 'AIA171','AIA193','AIA211','AIA304','AIA335','AIA1600','AIA1700', 'C2', 'C3', 'COR1', 'COR2', 'EUVI171', 'EUVI195', 'EUVI284', 'EUVI304', 'HI1', 'HI2', 'SoloHI', 'SoloHI1', 'SoloHI2', 'SoloHI3', 'SoloHI4', 'WISPR', 'WISPRI', 'WISPRO']
+    goods = ['AIA94', 'AIA131', 'AIA171','AIA193','AIA211','AIA304','AIA335','AIA1600','AIA1700', 'C2', 'C3', 'COR1', 'COR2', 'EUVI171', 'EUVI195', 'EUVI284', 'EUVI304', 'HI1', 'HI2', 'COR1A', 'COR2A', 'EUVI171A', 'EUVI195A', 'EUVI284A', 'EUVI304A', 'HI1A', 'HI2A', 'COR1B', 'COR2B', 'EUVI171B', 'EUVI195B', 'EUVI284B', 'EUVI304B', 'HI1B', 'HI2B' 'SoloHI', 'SoloHI1', 'SoloHI2', 'SoloHI3', 'SoloHI4', 'WISPR', 'WISPRI', 'WISPRO']
     quitIt = False
     for inst in insts:
         if inst not in goods:
@@ -1051,7 +1044,7 @@ def processObs(times, insts, inFolder='pullFolder/', outFolder='wbFits/', outFil
     # |------------ STEREO -----------|
     # |-------------------------------|
     doSTEREO = []
-    STkeys = ['COR1', 'COR2', 'EUVI171', 'EUVI195', 'EUVI284', 'EUVI304', 'HI1', 'HI2']
+    STkeys = ['COR1', 'COR2', 'EUVI171', 'EUVI195', 'EUVI284', 'EUVI304', 'HI1', 'HI2', 'COR1A', 'COR2A', 'EUVI171A', 'EUVI195A', 'EUVI284A', 'EUVI304A', 'HI1A', 'HI2A', 'COR1B', 'COR2B', 'EUVI171B', 'EUVI195B', 'EUVI284B', 'EUVI304B', 'HI1B', 'HI2B']
     for inst in insts:
         if inst in STkeys:
             doSTEREO.append(inst)
@@ -1118,5 +1111,5 @@ if __name__ == '__main__':
     endT   = '2023/09/24T20:00'
     
     times = [startT, endT]
-    sats  = [ 'WISPR']
+    sats  = [ 'COR2']
     processObs(times, sats)

@@ -367,11 +367,25 @@ def pullSTEREO(times, insts, EUVtime=10, CORtime=20, HItime=30, outFolder='pullF
     # |-----------------------------|
     # |-------- STEREO Prep --------|
     # |-----------------------------|
+    AB = ['A', 'B']
+    nInsts = len(insts)
+    ABtoDo = {}
+    # Check if passed specifically A or B in each inst
+    # and change check list but rm tag from inst name 
+    # bc originally coded to just search for both
+    for i in range(nInsts):
+        if 'A' in insts[i]:
+            insts[i] = insts[i].replace('A','')
+            ABtoDo[insts[i]] = [0]
+        elif 'B' in insts[i]:
+            insts[i] = insts[i].replace('B','')
+            ABtoDo[insts[i]] = [1]
+            
     # Figure out which instruments we want since
     # process them differently
     EUVIwav = []
     CORs = []
-    HIs  = []
+    HIs  = []        
     for inst in insts:
         if 'EUVI' in inst:
             EUVIwav.append(int(inst.replace('EUVI','')))
@@ -531,18 +545,18 @@ def pullSTEREO(times, insts, EUVtime=10, CORtime=20, HItime=30, outFolder='pullF
     # |-----------------------------|
     # |-------- Downloading --------|
     # |-----------------------------|
-    AB = ['A', 'B']
     # Do the DLs        
     if len(EUVIwav) > 0:
         if not waveIssue:
             for i in range(len(wavidx)):
-                for j in range(2):
+                for j in ABtoDo['EUVI'+EUVIwav[i]]:
                     idxs = wavidx[i][j]
                     if len(idxs) > 0:
                         print('Downloading STEREO EUVI'+ AB[j] + ' ' + str(EUVIwav[i]) + ' files...')
                         fullOut = outFolder + 'STEREO/EUVI'+ AB[j]+'/' + str(EUVIwav[i])+'/'
                         downloaded_files = Fido.fetch(result[0,idxs], path= fullOut + 'EUVI_'+ str(EUVIwav[i])+'a_{file}')
         else:
+            # Just do A/B for mystery cases
             for j in range(2):
                 if len(wavidx[j])>0:
                         print('Downloading Mystery STEREO EUVI files...')
@@ -557,28 +571,28 @@ def pullSTEREO(times, insts, EUVtime=10, CORtime=20, HItime=30, outFolder='pullF
                                 os.replace(aF,newName)
             
     if 'COR1' in CORs:
-        for j in range(2):
+        for j in ABtoDo['COR1']:
             if len(whichC[0][j]) > 0:
                 print('Downloading STEREO COR1'+AB[j]+' files...')
                 fullOut = outFolder + 'STEREO/COR1'+ AB[j]+'/'
                 downloaded_files = Fido.fetch(result[0,whichC[0][j]], path=fullOut+'/COR1'+ AB[j] +'_{file}') 
 
     if 'COR2' in CORs:
-        for j in range(2):
+        for j in ABtoDo['COR2']:
             if len(whichC[1][j]) > 0:
                 print('Downloading STEREO COR2'+AB[j]+' files...')
                 fullOut = outFolder + 'STEREO/COR2'+ AB[j]+'/'
                 downloaded_files = Fido.fetch(result[0,whichC[1][j]], path=fullOut+'/COR2'+ AB[j] +'_{file}') 
                     
     if 'HI1' in HIs:
-        for j in range(2):
+        for j in ABtoDo['HI1']:
             if len(whichC[2][j]) > 0:
                 print('Downloading STEREO HI1'+AB[j]+' files...')
                 fullOut = outFolder + 'STEREO/HI1'+ AB[j]+'/'
                 downloaded_files = Fido.fetch(result[0,whichC[2][j]], path=fullOut+'/HI1'+ AB[j] +'_{file}') 
 
     if 'HI2' in HIs:
-        for j in range(2):
+        for j in ABtoDo['HI2']:
             if len(whichC[3][j]) > 0:
                 print('Downloading STEREO HI2'+AB[j]+' files...')
                 fullOut = outFolder + 'STEREO/HI2'+ AB[j]+'/'
@@ -754,7 +768,7 @@ def pullObs(times, insts, outFolder='pullFolder/', EUVtime=10, CORtime=20, HItim
     # |---------------------------------------| 
     # |---- Check all inst keys are valid ----|
     # |---------------------------------------| 
-    goods = ['AIA94', 'AIA131', 'AIA171','AIA193','AIA211','AIA304','AIA335','AIA1600','AIA1700', 'C2', 'C3', 'COR1', 'COR2', 'EUVI171', 'EUVI195', 'EUVI284', 'EUVI304', 'HI1', 'HI2', 'SoloHI', 'SoloHI1', 'SoloHI2', 'SoloHI3', 'SoloHI4', 'WISPR', 'WISPRI', 'WISPRO']
+    goods = ['AIA94', 'AIA131', 'AIA171','AIA193','AIA211','AIA304','AIA335','AIA1600','AIA1700', 'C2', 'C3', 'COR1', 'COR2', 'COR1A', 'COR2A', 'COR1B', 'COR2B', 'EUVI171', 'EUVI195', 'EUVI284', 'EUVI304', 'EUVI171A', 'EUVI195A', 'EUVI284A', 'EUVI304A', 'EUVI171B', 'EUVI195B', 'EUVI284B', 'EUVI304B', 'HI1', 'HI2', 'HI1A', 'HI2A', 'HI1B', 'HI2B','SoloHI', 'SoloHI1', 'SoloHI2', 'SoloHI3', 'SoloHI4', 'WISPR', 'WISPRI', 'WISPRO']
     quitIt = False
     for inst in insts:
         if inst not in goods:
@@ -799,7 +813,7 @@ def pullObs(times, insts, outFolder='pullFolder/', EUVtime=10, CORtime=20, HItim
     # |------------ STEREO -----------|
     # |-------------------------------|
     doSTEREO = []
-    STkeys = ['COR1', 'COR2', 'EUVI171', 'EUVI195', 'EUVI284', 'EUVI304', 'HI1', 'HI2']
+    STkeys = ['COR1', 'COR2', 'EUVI171', 'EUVI195', 'EUVI284', 'EUVI304', 'HI1', 'HI2', 'COR1A', 'COR2A', 'EUVI171A', 'EUVI195A', 'EUVI284A', 'EUVI304A', 'HI1A', 'HI2A', 'COR1B', 'COR2B', 'EUVI171B', 'EUVI195B', 'EUVI284B', 'EUVI304B', 'HI1B', 'HI2B']
     for inst in insts:
         if inst in STkeys:
             doSTEREO.append(inst)
@@ -837,6 +851,6 @@ if __name__ == '__main__':
     endT   = '2023/09/24T18:00'
     
     times = [startT, endT]
-    sats  = [ 'AIA171']
-    pullObs(times, sats, EUVtime=20)
+    sats  = [ 'EUVI171A']
+    pullObs(times, sats)
             
