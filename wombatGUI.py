@@ -144,7 +144,6 @@ class ParamWindow(QMainWindow):
             self.layouts.append(layout)
             self.WFLays.append(WFlay)
         
-
     #|-------------------------------------| 
     #|--------- Layout Functions ----------|
     #|-------------------------------------| 
@@ -275,15 +274,15 @@ class ParamWindow(QMainWindow):
             cbox: the widget
      
         """
-        # |----- Make Combo Box ----|
+        # |----- Make Combo Box -----|
         cbox = QComboBox()
         
-        # |----- Add Items ----|
+        # |----- Add Items -----|
         cbox.addItem('Linear')
         cbox.addItem('Log')
         cbox.addItem('SQRT')
         
-        # |----- Connect Event ----|
+        # |----- Connect Event -----|
         cbox.currentIndexChanged.connect(self.back_changed)
         return cbox
         
@@ -796,10 +795,22 @@ class ParamWindow(QMainWindow):
         """
         print('Mass not coded yet')
             
+    
     #|------------------------------| 
     #|----------- Others -----------|
     #|------------------------------| 
     def cleanLayout(self,lay):
+        """
+        Function for clearing out a layout when a wf is changed/removed
+        
+        Inputs:
+            lay: a layout
+        
+        Actions:
+            Removes all the widgets from a layout so it appears
+            blank
+        
+        """
         for i in reversed(range(lay.count())): 
             item = lay.takeAt(i)
             widget = item.widget()
@@ -807,6 +818,19 @@ class ParamWindow(QMainWindow):
         return lay
     
     def updateWFpoints(self, aWF, widges):
+        """
+        Function to trigger wf update based on a parameter change
+        
+        Inputs:
+            aWF:    the wireframe of interest
+        
+            widges: the widgets that correspond to this wireframe
+        
+        Actions:
+            Updates the wireframe points/plot points using the 
+            new parameter values
+        
+        """
         # Got to check if all the points are set or this
         # will blow up on the first run through before panel is built
         flagIt = False
@@ -815,6 +839,7 @@ class ParamWindow(QMainWindow):
                 aWF.params[i] = float(widges[0][i].text())
             else:
                 flagIt = True
+        # If all set then update points and plots
         if not flagIt:
             aWF.getPoints()
             for ipw in range(nSats):
@@ -827,62 +852,135 @@ class ParamWindow(QMainWindow):
 # |------------------- Figure Window Class --------------------|
 # |------------------------------------------------------------|
 class FigWindow(QWidget):
-    def __init__(self, satName, myObs, myScls, satStuff, myNum=0, labelPW=True, tmap=[0]):
+    """
+    Class for the plot window showing the background image and the
+    projected wireframe points. It also sets up a limited number of 
+    widgets mostly related to scaling the background.
+    
+    Inputs:
+        myObs:    an array containing two times series, one of the unscaled 
+                  image maps and another of the corresponding headers
+                  e.g. [[map1, map2,...], [hdr1, hdr2, ...]]
+    
+        myScls:   an array of three times series the data scaled using diffent
+                  methods (linear, logarithmic, square root). This data is in 
+                  array form, not maps.
+                  e.g. [[lin1, log1, sqrt1], [lin2, log2, sqrt2], ...]
+    
+        satStuff: the header like structure created by getSatStuff.
+    
+    Optional Inputs:
+        myNum:    an index number for this plot window, useful when creating
+                  multiple windows, but unnecessary for single window
+                  defaults to 0
+    
+        labelPW:  flag to show labels of the spacecraft/instrument name and 
+                  time stamp at the bottom of the figure windows
+                  defaults to True
+    
+        tmap:     an array that maps the slider time index to the observation index.
+                  The obs aren't necessarily uniformly spaced but the t slider is
+                  so a map may look like [0, 1, 1, 2, 3, 4, 4] where 10 slider indices
+                  map to 5 observational indices. Also helps adjust for different
+                  time resolution for different instruments.        
+    
+     
+    """
+    def __init__(self, myObs, myScls, satStuff, myNum=0, labelPW=True, tmap=[0]):
+        """
+        Intial setup for the figure window class.
+    
+        Inputs:
+            myObs:    an array containing two times series, one of the unscaled 
+                      image maps and another of the corresponding headers
+                      e.g. [[map1, map2,...], [hdr1, hdr2, ...]]
+    
+            myScls:   an array of three times series the data scaled using diffent
+                      methods (linear, logarithmic, square root). This data is in 
+                      array form, not maps.
+                      e.g. [[lin1, log1, sqrt1], [lin2, log2, sqrt2], ...]
+    
+            satStuff: the header like structure created by getSatStuff.
+    
+        Optional Inputs:
+            myNum:    an index number for this plot window, useful when creating
+                      multiple windows, but unnecessary for single window
+                      defaults to 0
+    
+            labelPW:  flag to show labels of the spacecraft/instrument name and 
+                      time stamp at the bottom of the figure windows
+                      defaults to True
+    
+            tmap:     an array that maps the slider time index to the observation index.
+                      The obs aren't necessarily uniformly spaced but the t slider is
+                      so a map may look like [0, 1, 1, 2, 3, 4, 4] where 10 slider indices
+                      map to 5 observational indices. Also helps adjust for different
+                      time resolution for different instruments.
+        
+        External Calls:
+            check4CT from wombatLoadCTs
+     
+        """
         super().__init__()
-        # Obs are [[ims], [hdrs]] as passed to the GUI (prob MSB)
-        # Scls are [[lin, log, sqrt]] on -100,100 range
         
-        self.setGeometry(550*(myNum+1), 350, 350, 450)
-        self.winidx = myNum
-        self.labelIt = labelPW
-        
-        self.satStuff = satStuff
+        #|---- Setup variables ----|
+        self.winidx = myNum # index number for multi mode
+        self.labelIt = labelPW # show labels in plot    
+        self.satStuff = satStuff 
         self.satName = satStuff[0]['OBS'] +' '+ satStuff[0]['INST']
-        self.setWindowTitle(self.satName)
-        
         self.OGims = myObs[0]
         self.hdrs = myObs[1]
         self.myScls2 = myScls
         self.tidx = 0
         self.sclidx = 0
         self.st2obs = tmap # slider time to obs index
-
+        
+        #|---- Set up/name window ----|
+        self.setGeometry(550*(myNum+1), 350, 350, 450) 
+        self.setWindowTitle(self.satName.replace('_',''))        
+        
+        #|---- Make a layout ----|
         layoutP =  QGridLayout()
         
+        #|---- Add a plot widget ----|
         self.pWindow = pg.PlotWidget()
         self.pWindow.setMinimumSize(400, 400)
         self.pWindow.scene().sigMouseClicked.connect(self.mouse_clicked)
         layoutP.addWidget(self.pWindow,0,0,11,11,alignment=QtCore.Qt.AlignCenter)
         
-        # make an image item
+        #|---- Make an image item ----|
         self.image = pg.ImageItem()
-
+        
+        #|---- Check for color table ----|
+        # (from wombatLoadCTs)
         hasCT = check4CT(satStuff[0])
         if type(hasCT) != type(None):
              self.image.setLookupTable(hasCT)
         
+        #|---- Add the image ----|
         self.pWindow.addItem(self.image)
-        
         self.pWindow.setRange(xRange=(0,myObs[0][0].data.shape[0]), yRange=(0,myObs[0][0].data.shape[1]), padding=0)
         
-        # Hide the axes
+        #|---- Hide the axes ----|
         self.pWindow.hideAxis('bottom')
         self.pWindow.hideAxis('left')
         
-        # Set up scatters for the WF points so can adjust without clearing
+        #|---- Set up WF scatters ----|
+        # Need to do this here so can adjust them
+        # on the fly without clearing
         self.scatters = []
         for i in range(nwfs):
             aScat = pg.ScatterPlotItem(pen=pg.mkPen(width=1, color='g'), brush=pg.mkBrush(color='g'),symbol='o', size=2.5)
             self.scatters.append(aScat)
             self.pWindow.addItem(aScat)
         
-        # Background mode drop down box
+        #|---- Background mode drop down box ----|
         label = QLabel('Background Scaling')
         layoutP.addWidget(label, 12,0,1,5,alignment=QtCore.Qt.AlignCenter)
         self.cbox = self.bgComboBox()
         layoutP.addWidget(self.cbox,12,5,1,5,alignment=QtCore.Qt.AlignCenter)
         
-        # Min/max brightness sliders
+        #|---- Min brightness label/slider ----|
         minL = QLabel('Min Value:     ')
         layoutP.addWidget(minL, 13,0,1,9)
         self.MinSlider = QSlider()
@@ -893,6 +991,7 @@ class FigWindow(QWidget):
         layoutP.addWidget(self.MinSlider, 13,3,1,9)
         self.MinSlider.valueChanged.connect(lambda x: self.s2l(x, minL, 'Min Value: '))  
         
+        #|---- Min brightness label/slider ----|
         maxL = QLabel('Max Value:     ')
         layoutP.addWidget(maxL, 15,0,1,9)
         self.MaxSlider = QSlider()
@@ -903,91 +1002,174 @@ class FigWindow(QWidget):
         layoutP.addWidget(self.MaxSlider, 15,3,1,9)
         self.MaxSlider.valueChanged.connect(lambda x: self.s2l(x, maxL, 'Max Value: '))  
         
-        # If EUV switch to log at the start. Have to do after
-        # weve addded the sliders since will adjust them
+        #|---- EUV Dispay Mode ----|
+        # If EUV switch to show log at the start. Have to do after
+        # we've addded the sliders since will adjust them
         if self.satStuff[0]['OBSTYPE'] == 'EUV':
             self.cbox.setCurrentIndex(1)
         
-        
+        #|---- Save button
         saveBut = QPushButton('Save')
         saveBut.released.connect(self.SBclicked)
         layoutP.addWidget(saveBut, 17, 0, 1,3,alignment=QtCore.Qt.AlignCenter)
 
+        #|---- Mass button ----|
         massBut = QPushButton('Mass')
         massBut.released.connect(self.MBclicked)
         layoutP.addWidget(massBut, 17, 4, 1,3,alignment=QtCore.Qt.AlignCenter)
 
-        # Add things at the bottom
+        #|---- Exit button ----|
         exitBut = QPushButton('Exit')
         exitBut.released.connect(self.EBclicked)
         exitBut.setStyleSheet("background-color: red")
         layoutP.addWidget(exitBut, 17, 8, 1,3,alignment=QtCore.Qt.AlignCenter)
         
+        #|---- Set layout ----|
         self.setLayout(layoutP)
         
+        #|---- Show the background ----|
         self.plotBackground()
         
         
     #|------------------------------| 
     #|----------- Layout -----------|
     #|------------------------------| 
-
     def bgComboBox(self):
+        """
+        Combo box for the background scaling type
+        
+        Outputs:
+            cbox: the widget
+     
+        """
+        # |----- Make Combo Box -----|
         cbox = QComboBox()
+        
+        # |----- Add Items -----|
         cbox.addItem('Linear')
         cbox.addItem('Log')
         cbox.addItem('SQRT')
+        
+        # |----- Connect Event -----|
         cbox.currentIndexChanged.connect(self.back_changed)
         return cbox
         
+
     #|------------------------------| 
     #|----------- Events -----------|
     #|------------------------------| 
-    
     def s2l(self, x=None, l=None, pref=None):
+        """
+        Event for scaling slider changes.
+        
+        Inputs:
+            x:      the integer slider value
+            l:      the label friend for this slider
+            pref:   the prefix printed in front of the index in the label
+            * Parameters aren't optional but get passed through a lambda function like this
+        
+        Actions:
+            Sets the label to pref + x
+            Replots background using update min/max values
+     
+        """
         l.setText(pref + str(x))
         self.plotBackground()
 
     def keyPressEvent(self, event):
+        """
+        Event for key press events. 
+        
+        Actions (based on key):
+            q = close a window
+            esc = close everything
+     
+        """
         if event.key() == QtCore.Qt.Key_Q: 
             self.close()
         elif event.key() == QtCore.Qt.Key_Escape:
             sys.exit()
     
-
     def back_changed(self,text):
+        """
+        Event for background combo box changes
+        
+        Inputs:
+            text:      the text box (integer) value
+        
+        Actions:
+            Updates the index indicating background scaling type
+            Resets slider min/max to best guess vals for this scaling
+            Replots background
+        
+        """
         self.sclidx = text   
         self.MinSlider.setValue(self.satStuff[0]['SLIVALS'][0][int(text)])  
         self.MaxSlider.setValue(self.satStuff[0]['SLIVALS'][1][int(text)])  
         self.plotBackground()
-            
-       
+                   
     def EBclicked(self):
+        """
+        Event for clicking the exit button
+        
+        Actions:
+            Everything goes bye-bye
+        
+        """
         sys.exit()
 
     def SBclicked(self):
+        """
+        Event for clicking the save button
+        
+        Actions:
+            Calls the save function in the parameter window but flags
+            to only save results for this window
+        
+        """
         mainwindow.SBclicked(singleSat=self.winidx)
         
-
     def MBclicked(self):
+        """
+        Event for clicking the mass button
+        
+        Does nothing yet but working on that
+        
+        """
         print('Mass not coded yet')
     
     def mouse_clicked(self,event):
-        scene_pos = event.scenePos()
+        """
+        Event for clicking within a figure window
         
+        Input:
+            event: the thing triggered by clicking
+        
+        Actions:
+            Prints the following to the terminal:
+                SatName InstName pix: pixel_x pixel_y
+                     Tx, Ty (arcsec): Tx, Ty
+               Proj R (Rs), PA (deg): ProjR, PA
+        
+        """
+        #|---- Get the event loc in pix ----|
+        scene_pos = event.scenePos()
         view_pos = self.pWindow.plotItem.vb.mapSceneToView(scene_pos)
         pix = [view_pos.x(), view_pos.y()]
-        prefA = self.satStuff[self.tidx]['MYTAG'] + ' pix:'
+        
+        #|---- Print pix ----|
+        prefA = self.satStuff[self.tidx]['MYTAG'].replace('_','') + ' pix:'
         print (prefA.rjust(25), str(int(pix[0])).rjust(8), str(int(pix[1])).rjust(8))
         
-        # Convert to ra/dec
+        #|---- Convert to ra/dec ----| 
         skyres = self.OGims[self.tidx].pixel_to_world(pix[0]*u.pixel, pix[1]*u.pixel)
         Tx, Ty = skyres.Tx.to_value(), skyres.Ty.to_value()
         print ('Tx, Ty (arcsec):'.rjust(25), str(int(Tx)).rjust(8), str(int(Ty)).rjust(8))
         
-        # Convert to proj Rsun/PA
+        # |---- Convert to proj Rsun/PA  ----| 
         Rarc = np.sqrt(Tx**2 + Ty**2)
         Rpix = Rarc / self.satStuff[self.tidx]['SCALE']
+        # Adjust unites for HI
         if self.satStuff[self.tidx]['OBSTYPE'] == 'HI':
             Rpix = Rpix / 3600
         RRSun = Rpix /  self.satStuff[self.tidx]['ONERSUN']
@@ -996,33 +1178,58 @@ class FigWindow(QWidget):
         print ('Proj R (Rs), PA (deg):'.rjust(25), '{:8.2f}'.format(RRSun), '{:8.1f}'.format(PA))
         print ('')
         
+
     #|------------------------------| 
     #|----------- Others -----------|
     #|------------------------------| 
     def plotWFs(self, justN=0):
-        # This is the slow version but keeping syntax around if need to check anything
+        """
+        Function for updating the WF scatter points 
+        
+        Optional Inputs:
+            justN: an index indicating to only update that WF
+        
+        Actions:
+            Changes the scatter points within an image
+        
+        """
+        # This is the slow version of pts2proj using sunpy/astropy that runs
+        # way too slow to use for updating points continually via slider.
+        # Keep the syntax around for comparison if needed but currently matching
+        # within a pixel and running much faster
         #skyPt = SkyCoord(x=0, y=0, z=1, unit='R_sun', representation_type='cartesian', frame='heliographic_stonyhurst')
         #myPt2 = self.OGims[self.tidx].world_to_pixel(skyPt)
         
+        #|---- Determine who to update ----|
         toDo = range(nwfs)
         if justN:
             toDo = [justN]
-            
+        
+        #|---- Loop through to do cases ----|    
         for i in toDo:
+            #|---- Double check should do ----|
+            # Don't bother if not shown or type is none
             if wfs[i].showMe & (type(wfs[i].WFtype) != type(None)):    
-            #if type(wfs[i].WFtype) != type(None):                
-                # Set up the input parameters for pts2proj
+                #|----------------------|
+                #|---- Get sat info ----|
+                #|----------------------|
                 pos = []
+                # Location
                 obs = self.satStuff[self.tidx]['POS']
+                # Scale btwn pix and arcsec
                 obsScl = [self.satStuff[self.tidx]['SCALE'], self.satStuff[self.tidx]['SCALE']]
                 if self.satStuff[self.tidx]['OBSTYPE'] == 'HI':
                     obsScl = [self.satStuff[self.tidx]['SCALE'] * 3600, self.satStuff[self.tidx]['SCALE'] * 3600]
                 cent = self.satStuff[self.tidx]['SUNPIX']
+                # Occulter info
                 if 'OCCRARC' in self.satStuff[self.tidx]:
                     occultR = self.satStuff[self.tidx]['OCCRARC']
                 else:
                     occultR = None
+                # WCS info    
                 mywcs  = self.satStuff[self.tidx]['WCS']
+                
+                #|---- Set wf aesthetics ----|
                 myColor =wfs[i].WFcolor
                 # change pen wid if HI
                 penwid =1
@@ -1030,6 +1237,9 @@ class FigWindow(QWidget):
                     penwid = 4
                 
                 
+                #|--------------------------|
+                #|---- EUV Proj2Surface ----|
+                #|--------------------------|
                 # For the EUV panels, check if the WF is much higher
                 # than the FOV and just project it onto the surface
                 # instead if it is
@@ -1037,6 +1247,7 @@ class FigWindow(QWidget):
                 if self.satStuff[self.tidx]['OBSTYPE'] == 'EUV':
                     pts = wfs[i].points
                     rs = np.sqrt(pts[:,0]**2 + pts[:,1]**2 + pts[:,2]**2)
+                    # Compare max wf radius to inst FOV
                     if np.mean(rs) > 1.5*self.satStuff[self.tidx]['FOV']:
                         flatEUV = True
                 # Downselect to fewer points for proj EUV
@@ -1045,14 +1256,20 @@ class FigWindow(QWidget):
                     toShow = toShow[::2]
                     myColor = '#C81CDE'
                     occultR = 1. * self.satStuff[self.tidx]['ONERSUN']
-                    
+                
+                #|------------------------|
+                #|---- HI Flag Inside ----|
+                #|------------------------|    
                 # Check if the satellite is in the WF for HI bcs points
                 # get weird so at least change color to warn this is the case
                 if self.satStuff[self.tidx]['OBSTYPE'] == 'HI':
+                    # Get max wf R
                     myPos = self.satStuff[self.tidx]['POS']
                     myR = myPos[2] / 7e8
                     pts = wfs[i].points
                     maxR = np.max(np.sqrt(pts[:,0]**2 + pts[:,1]**2 + pts[:,2]**2))
+                    
+                    # Get AW
                     AW = None
                     if 'AW (deg)' in wfs[i].labels:
                         AWidx = np.where(wfs[i].labels == 'AW (deg)')
@@ -1062,15 +1279,19 @@ class FigWindow(QWidget):
                         AW = wfs[i].params[AWidx][0]
                     # add slab options
                     
+                    # Rough check if inside
                     if AW:
                         if myR < maxR:
                             satLon, wflon = myPos[1], wfs[i].params[1]
                             if np.abs(satLon - wflon) < AW:
                                 myColor = '#C81CDE'
-                            
-                    inFoV = 32
-                            
+                                
+                                
+                #|------------------------|
+                #|---- Project Points ----|
+                #|------------------------|            
                 for jj in toShow:
+                    # Convert Cart to Sph
                     pt = wfs[i].points[jj,:]
                     r = np.sqrt(pt[0]**2 + pt[1]**2 + pt[2]**2)
                     lat = np.arcsin(pt[2]/r) * 180/np.pi
@@ -1091,28 +1312,44 @@ class FigWindow(QWidget):
                             myPt = pts2proj(pt, obs, obsScl, mywcs, center=cent, occultR=occultR)
                         else:
                             myPt = []
+                            
+                    # Just calc all non wispr cases        
                     else:
                         myPt = pts2proj(pt, obs, obsScl, mywcs, center=cent, occultR=occultR)
                     
                     # If the point is in the FoV add it to draw    
                     if len(myPt) > 0:          
                         pos.append({'pos': [myPt[0][0], myPt[0][1]], 'pen':{'color':myColor, 'width':penwid}, 'brush':pg.mkBrush(myColor)})
-                        
-                self.scatters[i].setData(pos)
                 
-
+                #|---- Reset the scatters to new positions ----|        
+                self.scatters[i].setData(pos)
  
     def plotBackground(self):
-        #self.ui.graphWidget1.addItem(image1)
+        """
+        Function for updating the background image 
+        
+        """
+        #|---- Grab data for this time/scaling ----|     
         myIm = self.myScls2[self.tidx][self.sclidx]
+        
+        #|---- Grab min/max from slider ----|     
         slMin = self.MinSlider.value()
         slMax = self.MaxSlider.value()
+        
+        #|---- Update image ----|     
         self.image.updateImage(image=myIm, levels=(slMin, slMax))
+        
+        #|---- Draw stuff on top ----|     
         if self.satStuff[self.tidx]['OBSTYPE'] != 'EUV':
+            #|---- Circle at 1 Rs ----|     
             if 'SUNCIRC' in self.satStuff[self.tidx]:
                 self.pWindow.plot(self.satStuff[self.tidx]['SUNCIRC'][0], self.satStuff[self.tidx]['SUNCIRC'][1])
+            
+            #|---- Line for Solar N ----|         
             if 'SUNNORTH' in self.satStuff[self.tidx]:
                 self.pWindow.plot(self.satStuff[self.tidx]['SUNNORTH'][0], self.satStuff[self.tidx]['SUNNORTH'][1], symbolSize=3, symbolBrush='w', pen=pg.mkPen(color='w', width=1))
+                
+        #|---- Add text labels ----|             
         if self.labelIt:
             geom = self.pWindow.visibleRange()
             wid = geom.width()
@@ -1128,24 +1365,38 @@ class FigWindow(QWidget):
 # |------------------ Overview Window Class -------------------|
 # |------------------------------------------------------------|
 class OverviewWindow(QWidget):
+    """
+    Class for the overview window showing the relative satellite locations
+    and the direction of each wireframe
+    
+    Inputs:
+        satStuff: an array of all the satStuff dictionaries for all sats
+     
+    """
     def __init__(self, satStuff):
+        """
+        Class for the overview window showing the relative satellite locations
+    
+        Inputs:
+            satStuff: an array of all the satStuff dictionaries for all sats
+     
+        """
         super().__init__()
-        # Shows the position of the satellites and the slider longitude
+        
+        #|---- Set up/name window ----|
         self.setFixedSize(400, 400) 
         self.setWindowTitle('Polar View')
-
+        
+        #|---- Make a layout ----|
         layoutOV =  QGridLayout()
         
+        #|---- Make a plot widget ----|
         self.pWindow = pg.PlotWidget()
         self.pWindow.setMinimumSize(350, 350)
+        self.pWindow.setRange(xRange=(-1.2, 1.2), yRange=(-1.2,1.2), padding=0)
         layoutOV.addWidget(self.pWindow,0,0,11,11,alignment=QtCore.Qt.AlignCenter)
         
-        # make an image item
-        #self.image = pg.ImageItem()
-        #self.pWindow.addItem(self.image)
-        self.pWindow.setRange(xRange=(-1.2, 1.2), yRange=(-1.2,1.2), padding=0)
-        
-        #self.pWindow.plot([-1,1], [-1,1])
+        #|---- Create the sun and earth ----|
         twopi = np.linspace(0, 2.01*np.pi, 200)
         x_data = np.cos(twopi)
         y_data = np.sin(twopi)
@@ -1153,40 +1404,44 @@ class OverviewWindow(QWidget):
         self.pWindow.plot([0], [0], symbol='o', symbolSize=20, symbolBrush=pg.mkBrush(color='y'))
         self.pWindow.plot([0], [-1], symbol='o', symbolSize=15, symbolBrush=pg.mkBrush(color='blue'))
         
-        # Hide the axes
+        #|---- Hide the axes ----|
         self.pWindow.hideAxis('bottom')
         self.pWindow.hideAxis('left')
         
         
-        # Set up scatters for the sat points so can adjust without clearing
+        #|---- Set up scatters for sats ----|
         self.scatters = []
         self.satLabs = []
         for i in range(nSats):
-            # would be good to update this to adjust with time
-            myPos = satStuff[i][0]['POS']
+            #|---- Get a proj sat loc ----|
+            myPos = satStuff[i][pws[i].tidx]['POS']
             myName = satStuff[i][0]['OBS']
             myR = myPos[2] / 1.496e+11 
             myLon = myPos[1] * np.pi / 180.
             y = - myR * np.cos(myLon)
             x = myR * np.sin(myLon)
-            aScat = pg.ScatterPlotItem(pen=pg.mkPen(width=1, color='w'), brush=pg.mkBrush(color='w'),symbol='o', size=8)
             
+            #|---- Make a scatter and set loc ----|
+            aScat = pg.ScatterPlotItem(pen=pg.mkPen(width=1, color='w'), brush=pg.mkBrush(color='w'),symbol='o', size=8)
             self.scatters.append(aScat)
             pos = []
             pos.append({'pos': [x,y]})
             self.scatters[i].setData(pos)
+            
+            #|---- Add to window ----|
             self.pWindow.addItem(aScat)
             
+            #|---- Print sat name ----|
+            # Want to change this to legend, TBD
             myName = satStuff[i][0]['SHORTNAME']
             text_item = pg.TextItem(myName, anchor=(0.5, 0.5))
             ysat = - 0.85*myR * np.cos(myLon)
             xsat = 0.85*myR * np.sin(myLon)
             text_item.setPos(xsat, ysat)
-            
             self.satLabs.append(text_item)
             self.pWindow.addItem(text_item)
         
-        # Set up arrow for the WF lons
+        #|---- Set up arrow for the WF lons ----|
         self.arrows = []
         for i in range(nwfs):
             arrow = pg.ArrowItem(angle=-45, tipAngle=0, headLen=0, tailLen=0, tailWidth=0, pen={'color': 'w', 'width': 2}, brush='b')
@@ -1196,19 +1451,42 @@ class OverviewWindow(QWidget):
         self.setLayout(layoutOV)
     
     def updateArrow(self, i, color='w'):
+        """
+        Function for updating wf longitude arrow.
+        
+        Inputs:
+            i:      the WF index
+        
+        Optional Input:
+            color:  the color of this WF
+     
+        """
+        #|---- Get the WF lon ----|
         mywf = wfs[i]
         lon  = mywf.params[1]
+        
+        #|---- Get arrow head loc ----|
         rlon = lon * np.pi /180.
-        hL, tL = 0.1, 0.3
+        hL, tL = 0.1, 0.3 # head length, tail length
         aL = hL+tL
         xh = aL * np.sin(rlon)
         yh = -aL * np.cos(rlon)
         ang = -np.arctan2(yh, xh) * 180 / np.pi
+        
+        #|---- Update the arrow ----|
         self.arrows[i].setStyle(angle=lon-270, headWidth=0.05, headLen=hL, tailLen=tL, tailWidth=0.03, pxMode=False,  pen={'color': color, 'width': 2}, brush=color)
         tail_len = self.arrows[i].opts['tailLen']
         self.arrows[i].setPos(xh, yh)
         
     def keyPressEvent(self, event):
+        """
+        Event for key press events. 
+        
+        Actions (based on key):
+            q = close a window
+            esc = close everything
+     
+        """
         if event.key() == QtCore.Qt.Key_Q: 
             self.close()
         elif event.key() == QtCore.Qt.Key_Escape:
@@ -1219,6 +1497,31 @@ class OverviewWindow(QWidget):
 # |---------------- Scale the Background Imgs -----------------|
 # |------------------------------------------------------------|
 def makeNiceMMs(obsIn, satStuffs):
+    """
+    Function to convert input maps into scaled arrays with values
+    between 0-255 that are ready to show as is in the plot windows.
+    We process this all ahead of time so the GUI flips through 
+    existing data without needing new calculations
+
+    Inputs:
+        obsIn:     The observations from a single instrument in the form
+                   [[map1, map2, ...], [hdr1, hdr2, ...]]
+    
+        satStuffs: the header like structure created by getSatStuff.
+           
+    Outputs:
+        allScls:   an array of three times series the data scaled using diffent
+                   methods (linear, logarithmic, square root). This data is in 
+                   array form, not maps.
+                   e.g. [[lin1, log1, sqrt1], [lin2, log2, sqrt2], ...]
+    
+        satStuffs: the header like structure created by getSatStuff 
+                   but with a few additional entries
+    
+    """
+    #|-------------------------------------| 
+    #|---- Configuration Dictionaries -----|
+    #|-------------------------------------|
     # Dictionaries that establish the scaling of things
     # Pull the desired values for each instrument
     
@@ -1228,24 +1531,26 @@ def makeNiceMMs(obsIn, satStuffs):
     # Where the background sliders start (between 0 and 255)
     sliVals = {'AIA':[[0,0,0], [191,191,191]], 'SECCHI_EUVI':[[0,32,0], [191,191,191]], 'LASCO_C2':[[0,0,21],[191,191,191]], 'LASCO_C3':[[37,0,37],[191,191,191]], 'SECCHI_COR1':[[63,0,21],[191,191,191]], 'SECCHI_COR2':[[63,0,21],[191,191,191]], 'SECCHI_HI1':[[0,0,21],[128,191,191]], 'SECCHI_HI2':[[0,0,21],[128,191,191]],  'WISPR_HI1':[[0,0,21],[128,191,191]], 'WISPR_HI2':[[0,0,21],[128,191,191]], 'SoloHI':[[0,0,21],[128,191,191]]}
     
-    # Holder for the scaled images    
-    allScls = []
-    
     # Pull the configuration based on instrument
     myInst = satStuffs[0]['INST']
     myMM = pMMs[myInst]
     mySliVals = sliVals[myInst]
     
-    # Make an empty holder for all the data we pull out of maps
+    #|-------------------------------------| 
+    #|------- Pull/Clean Map data ---------|
+    #|-------------------------------------|
+    #|---- Make empty holder ----|
     sz = obsIn[0][0].data.shape
     allObs = np.zeros([len(satStuffs), sz[1], sz[0]])
+    #|---- Fill from map data ----|
     for i in range(len(satStuffs)):
         allObs[i,:,:] = np.transpose(obsIn[0][i].data)
         
-    # Get overall median
+    #|---- Get overall median ----|
     imNonNaN = allObs[~np.isnan(allObs)]   
     medval  = np.median(np.abs(imNonNaN))
     
+    #|---- Check if diff image ----|
     # Get the median negative value to comp to the median abs
     # value. If neg med big enough assume that is diff image
     negmed  = np.abs(np.median(imNonNaN[np.where(imNonNaN < 0)]))
@@ -1253,72 +1558,141 @@ def makeNiceMMs(obsIn, satStuffs):
     if (negmed / medval) > 0.25: # guessing at cutoff of 25%, might tune
         diffImg = True
     
-    # Set NaNs based on if diff or not    
+    #|---- Clean out NaNs ----|
     if not diffImg:
         allObs[np.isnan(allObs)] = 0
     else:
         allObs[np.isnan(allObs)] = -9999
     
-    # Process the linear images
-    linMin, linMax = np.percentile(imNonNaN, myMM[0][0]), np.percentile(imNonNaN, myMM[1][0])      
+    #|-------------------------------------| 
+    #|--------- Process the data ----------|
+    #|-------------------------------------|    
+    
+    #|---- Scaled image holder ----|   
+    allScls = []    
+    
+    #|---- Process linear imgs ----|   
+    # Get vals at min/max percentile from the config dictionary
+    linMin, linMax = np.percentile(imNonNaN, myMM[0][0]), np.percentile(imNonNaN, myMM[1][0])   
+    # If a diff image reset min to neg val based on max   
     if diffImg:
         linMin = - 0.5*linMax
+    # Calc range and scale to 0 - 255
     rng = linMax- linMin
     linIm = (allObs - linMin) * 255 / rng
     
-    # Process the log image
+    #|---- Process log imgs ----|   
+    # Normalize to keep things in nice ranges
     tempIm = allObs / medval
     tempNonNan = imNonNaN / medval
+    # Get min val based on config dict
     minVal = np.percentile(np.abs(tempNonNan),myMM[0][1])
+    # Separate into positive and negative values
     pidx = np.where(tempIm > minVal)
     nidx = np.where(tempIm < -minVal)
+    # Make new img
     logIm = np.zeros(tempIm.shape)
+    # Set where abs val < min to 1
     logIm[np.where(np.abs(tempIm) < minVal)] = 1
+    # Positive is just log + 1
     logIm[pidx] = np.log(tempIm[pidx] - minVal + 1)  
+    # Negative is -log(abs) + 1
     logIm[nidx] = -np.log(-tempIm[nidx] - minVal + 1)  
+    # Get max val from config dict and rescale
     percX = np.percentile(logIm, myMM[1][1])
     logIm = 191 * logIm / percX
     
-    # Process the sqrt image
+    #|---- Process sqrt imgs ----|   
+    # Normalize to keep things in nice ranges
     tempIm = allObs / medval
+    # Get min val based on config dict
     minVal = np.percentile(tempNonNan,myMM[0][2])
-    tempIm = tempIm - minVal # set minVal at zero
+    # Set min val to zero
+    tempIm = tempIm - minVal 
+    # Set all neg to zero
     tempIm[np.where(tempIm < 0)] = 0
+    # Sqrt now that everyone is positive
     sqrtIm = np.sqrt(tempIm)
+    # Get max val from config dict and rescale
     percX = np.percentile(sqrtIm, myMM[1][2])
     sqrtIm = 191 * sqrtIm / percX
     
+    
+    #|-------------------------------------| 
+    #|--------- Package Results -----------|
+    #|-------------------------------------|
     for i in range(len(satStuffs)):
-        # Add the slider init values to each satStuff
+        #|---- Add the slider init values to satStuff ----|
         satStuffs[i]['SLIVALS'] = mySliVals
     
-        # package the scaled images for this time step
+        #|---- Package this time step ----|
         sclIms = [linIm[i], logIm[i],  sqrtIm[i]]
         
-        # Add the mask if we have one
+        #|---- Add a mask (if needed) ----|
         if 'MASK' in satStuffs[i]:
             midx = np.where(satStuffs[i]['MASK'] == 1)
             for k in range(3):
                 # black out all occulted
                 sclIms[k][midx] = -100. # might need to change if adjust plot ranges
                 
-        # Append masked/scaled images to master list
+        #|---- Append masked/scaled images to out list ----|
         allScls.append(sclIms)
     return allScls, satStuffs
 
 # |------------------------------------------------------------|
 # |----------------- Setup up satStuff dicts ------------------|
 # |------------------------------------------------------------|
-def getSatStuff(imMap, diffDate=None):
-    # Set up satDict as a micro header that we will package the mask in
-    # Keys are OBS, INST, MYTAG, POS, SCALE, CRPIX, WCS, SUNPIX, ONERSUN, MASK
-    # OCCRPIX, OCCRARC, SUNCIRC, SUNNORTH, OBSTYPE, FOV, DATEOBS
+def getSatStuff(imMap):
+    """
+    Function to make a header like structure with keywords and 
+    values but specific to what wombat desires
+    
+    Inputs:
+        imMap:     a single observation map
+           
+    Outputs:
+        satDict:   a dictionary with useful satellite information
+                   the keys are as follows:
+                        OBS:       observatory/satellite name
+                        INST:      instrument name
+                        MYTAG:     nice name string with obs+inst
+                        OBSTYPE:   type of observation (EUV, COR, HI)
+                        WAVE:      wavelength in angstroms (only for EUV)
+                        SHORTNAME: shorter version of MYTAG
+                        DATEOBS:   string for the date as YYYYMMDDTHH:MM:SS
+                        POS:       postion of sat [lat, lon, R] in [deg, deg, m]
+                        SCALE:     plate scale in arcsec/pix (or deg/pix for HI)
+                        CRPIX:     pixel location of the reference pixel
+                        WCS:       wcs structure
+                        SUNPIX:    pixel location of the center of the sun
+                        ONERSUN:   one solar radius in pixels
+                        FOV:       maximum radial distance of a corner in Rs
+                        MASK:      array with masked pixels set to 1 (0 elsewhere)
+                        OCCRPIX:   radius of occulter in pixels
+                        OCCRARC:   radius of occulter in arcsecs
+                        SUNCIRC:   array with the xy pixels for an outline of the sun
+                        SUNNORTH:  array with xy pixels to indicate solar north direction
+    
+    External Calls:
+        fitshead2wcs from wcs_funs                       
+    
+    """
+    #|---- Initialize dictionary ----|
     satDict = {}
     
-    # Get the name 
-    myhdr   = imMap.meta
+    # |-----------------|
+    # |---- Get OBS ----|
+    # |-----------------|
+    # Pull the hdr/map metadata
+    myhdr   = imMap.meta   
     satDict['OBS'] =  myhdr['obsrvtry']
-    
+   
+    # |------------------|
+    # |---- Get INST ----|
+    # |------------------|
+    # All the satellites have different options on saving
+    # instrument names vs detector names. Combine into a single
+    # INST tag for wombat
     # PSP format
     if myhdr['obsrvtry'] == 'Parker Solar Probe':
         satDict['OBS'] =  myhdr['obsrvtry']
@@ -1343,8 +1717,11 @@ def getSatStuff(imMap, diffDate=None):
         satDict['INST'] = myhdr['instrume'] + '_' + myhdr['detector']
         myTag   = myhdr['telescop'] + '_' + myhdr['instrume'] + '_' + myhdr['detector']
     satDict['MYTAG'] = myTag
-        
-    # Obs type - flag between HI, COR, EUV
+     
+    # |---------------------|
+    # |---- Get OBSTYPE ----|    
+    # |---------------------|
+    # Flag between HI, COR, EUV
     if satDict['OBS'] in ['Parker Solar Probe', 'Solar Orbiter']:
         satDict['OBSTYPE'] = 'HI'
     elif satDict['OBS'] in ['STEREO_A', 'STEREO_B']:
@@ -1361,17 +1738,25 @@ def getSatStuff(imMap, diffDate=None):
             satDict['OBSTYPE'] = 'EUV'
     elif satDict['OBS'] == 'SDO':
          satDict['OBSTYPE'] = 'EUV'
-
+    
+    # |------------------|
+    # |---- Get WAVE ----|   
+    # |------------------|
     # Add the wavelength if EUV
     if satDict['OBSTYPE'] == 'EUV':
         satDict['WAVE'] = str(myhdr['WAVELNTH'])
         satDict['MYTAG'] = satDict['MYTAG'] + '_' + satDict['WAVE']
             
+    # |-----------------------|
+    # |---- Get SHORTNAME ----|    
+    # |-----------------------|
     shortNames = {'Parker Solar Probe':'PSP', 'Solar Orbiter':'SolO', 'STEREO_A':'STA', 'STEREO_B':'STB', 'SOHO':'SOHO', 'SDO':'SDO'}
     satDict['SHORTNAME'] = shortNames[satDict['OBS']]
     
     
-    # Get obs date/time
+    # |---------------------|
+    # |---- Get DATEOBS ----|    
+    # |---------------------|
     if len(myhdr['date-obs']) > 13:
         satDict['DATEOBS'] = myhdr['date-obs']
     else:
@@ -1381,33 +1766,50 @@ def getSatStuff(imMap, diffDate=None):
         dotidx = satDict['DATEOBS'].find('.')
         satDict['DATEOBS'] = satDict['DATEOBS'][:dotidx]
      
-
-    # Get satellite info    
+    # |-----------------|
+    # |---- Get POS ----|    
+    # |-----------------|
+    # Get satellite position
     obsLon = imMap.observer_coordinate.lon.degree
     obsLat = imMap.observer_coordinate.lat.degree
     obsR = imMap.observer_coordinate.radius.m
     satDict['POS'] = [obsLat, obsLon,  obsR]
     
-    # Plate scale in arcsec/pix
+    # |-------------------|
+    # |---- Get SCALE ----|    
+    # |-------------------|
+    # Plate scale in arcsec/pix for EUV/COR
+    # or deg/pix for HI
     # Check to make sure same in x/y since we will assume as much
     if (imMap.scale[0].to_value() != imMap.scale[1].to_value()):
         sys.exit('xy scales not equilent. Not set up to handle this')    
     obsScl  = imMap.scale[0].to_value()
     satDict['SCALE'] = obsScl
     
+    # |-------------------|
+    # |---- Get CRPIX ----|    
+    # |-------------------|
     # Reference pixel
     cx,cy = int(myhdr['crpix1'])-1, int(myhdr['crpix2'])-1
     satDict['CRPIX'] = [cx, cy]
     
-    # Get WCS header and pix location of Sun
+    # |-----------------|
+    # |---- Get WCS ----|    
+    # |-----------------|
     myWCS = fitshead2wcs(myhdr)
     satDict['WCS'] = myWCS
+    
+    # |--------------------|
+    # |---- Get SUNPIX ----|    
+    # |--------------------|
     centS = wcs_get_pixel(myWCS, [0.,0.])
     sx, sy = centS[0], centS[1]
     satDict['SUNPIX'] = [sx, sy]
     
-    
-    # Get size of 1 Rs in pix
+    # |---------------------|
+    # |---- Get ONERSUN ----|    
+    # |---------------------|
+    # Get 1 Rs in pix
     if 'rsun' in imMap.meta:
         myRs = imMap.meta['rsun'] # in arcsec
     else:
@@ -1418,7 +1820,10 @@ def getSatStuff(imMap, diffDate=None):
         oners = oners / 3600
     satDict['ONERSUN'] = oners
     
-    # Get location of edges
+    # |-----------------|
+    # |---- Get FOV ----|    
+    # |-----------------|
+    # Get maximum radial distance of the corners
     myFOV = 0
     for i in [0,imMap.data.shape[0]-1]:
         for j in [0,imMap.data.shape[1]-1]:
@@ -1428,12 +1833,16 @@ def getSatStuff(imMap, diffDate=None):
             if thisFOV > myFOV: myFOV = thisFOV
     satDict['FOV'] = myFOV
     
-    # Actually make the mask
+    # |---------------------------|
+    # |---- Add Occulter Mask ----|    
+    # |---------------------------|
+    # Make mask array
     mask = np.zeros(imMap.data.shape)
     # Check that not SolO/PSP or STEREO HI
     if (satDict['OBSTYPE'] != 'HI'):   
         myOccR  = occultDict[myTag][0] # radius of the occulter in Rs
         occRpix = int(myOccR * oners)
+        # Add radius of occulter in pix and arcsecs
         satDict['OCCRPIX'] = myOccR * oners
         satDict['OCCRARC'] = myOccR * oners * imMap.scale[0].to_value()
         
@@ -1442,7 +1851,6 @@ def getSatStuff(imMap, diffDate=None):
             j = int(np.sqrt(occRpix**2 - i**2))
             lowY = np.max([0,cy-j])
             hiY  = np.min([imMap.meta['naxis2']-2, cy+j])
-            #print (cx+i, lowY,hiY+1)
             if cx+i <= imMap.meta['naxis2']-1:
                 mask[cx+i, lowY:hiY+1] = 1
             if cx-i >=0:
@@ -1460,15 +1868,22 @@ def getSatStuff(imMap, diffDate=None):
                 hiY  = np.min([imMap.meta['naxis2'],cy + possY])
                 mask[i,:lowY+1] = 1
                 mask[i,hiY:] = 1
+                
+        # Add to dict
         satDict['MASK'] = mask
         
-        # Get the sun outline
+        # |-------------------------|
+        # |---- Add Sun Outline ----|    
+        # |-------------------------|
         thetas = np.linspace(0, 2.1*3.14159,100)
         xs = oners * np.cos(thetas) + sx
         ys = oners * np.sin(thetas) + sy
         satDict['SUNCIRC'] = [xs, ys]
         
-        # Get the north line
+        # |--------------------------|
+        # |---- Add Solar N Line ----|    
+        # |--------------------------|
+        # Can use slow skycoord/map version bc only call once
         skyPt = SkyCoord(x=0, y=0, z=1, unit='R_sun', representation_type='cartesian', frame='heliographic_stonyhurst')
         myPt2 = imMap.world_to_pixel(skyPt)
         satDict['SUNNORTH'] = [[sx, myPt2[0].to_value()], [sy, myPt2[1].to_value()]]
@@ -1478,46 +1893,92 @@ def getSatStuff(imMap, diffDate=None):
 # |------------------------------------------------------------|
 # |----------------- Project points onto map ------------------|
 # |------------------------------------------------------------|
-def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None, printIt=False):
-    #  
-    # Take in a list of points and an observer location and project into pixel coordinates
-    # Expect pts as [lat, lon, r] in [deg, deg, x] where x doesn't matter as long as consistent
-    # In theory can be in any 3D sphere system as long as consistent across all pts (inc obs) 
-    # Scale should either be a single value or [scalex, scaley] !!! yes this is oppo of lat/lon input 
-    #   order but this is how CK's brain works
-    # occultR is an angle, either arcsec/deg to match scale
+def pts2proj(pts_in, obs, scale, mywcs, occultR=None):
+    """
+    Function to take a series of points in spherical coordinates and return the
+    pixel locations on a map. This function pulls the appropriate information
+    then passes it to wcs_get_pixels to perform the calculation
     
-    # Useful constants 
+    Right now wombat only calls it using a single point at a time but it was 
+    probably set up to handle an array of points but hasn't been tested for that
+    in some time
+    
+    Inputs:
+        pts_in:  a point (or list of points, probably) in the form [lat, lon, r]
+                 where the units are [deg, deg, x]. We advocate using Stonyhurst
+                 (Earth at longitude 0) and meters for the radius but in theory
+                 as long as the pts_in and obs are in the same coordinates it 
+                 should work 
+                 * note that pts are lat/lon order while scale is x/y
+    
+        obs:     an array for the observer location in the form [lat, lon, r]
+                 where the units are [deg, deg, x]. We advocate using Stonyhurst
+                 (Earth at longitude 0) and meters for the radius but in theory
+                 as long as the pts_in and obs are in the same coordinates it 
+                 should work 
+    
+        scale:   conversion factor ang/pix. It can be either a single value that
+                 is the same for both xy or an array of [scalex, scaley]. ang should
+                 be in arcsec/pix for EUV/COR or deg/pix for HI
+                 * note that scale is x/y order while pts are lat/lon
+    
+        mywcs:   a wcs structure (converted from header prev via fitshead2wcs)
+
+    Optional Inputs:
+        occultR: radius of the inner occulter in the same angular unit as scale
+
+           
+    Outputs:
+        outs:   the projected x,y pixel position(s) corresponding to pts_in
+                packages as [[x1, y1], [x2, y2], ...]
+    
+    External calls:
+        wcs_get_pixels from wcs_funcs
+        
+    """
+   
+    #|---- Useful constants ----|
     rad2arcsec = 206265
     dtor = np.pi / 180.
     
-    # check inputs and reformat as 2D array (even if single pt)
+    # |----------------------------|
+    # |---- Check input format ----|    
+    # |----------------------------|
+    # Reformat as 2D array if single pt to keep
+    # the calculation consistent
     if isinstance(pts_in, list):
         pts_in = np.array(pts_in)
     
     if len(pts_in.shape) == 1:
         pts_in = np.array([pts_in])
-        
-    # convert all the pts to radians
+    
+    # |--------------------------------------|
+    # |---- Convert to rotated Cartesian ----|    
+    # |--------------------------------------|    
+    
+    #|---- convert pts to radians ----|
     pts_lats = pts_in[:,0]*dtor 
     pts_lons = pts_in[:,1]*dtor 
     pts_rs   = pts_in[:,2]
 
-    # convert obs location
+    #|---- convert obs to radians ----|
     obs_lat = obs[0]*dtor
     obs_lon = obs[1]*dtor
     obs_r   = obs[2]
     
-    # define dLon var as short hand
+    #|---- lon dif ----|
     dLon = pts_lons - obs_lon
     
+    #|---- Actual conversion ----|
     # Convert from Stony heliographic (or something similar) to heliocentric cartesian
     # this is with x to right, y up, z toward obs
     x = pts_rs  * np.cos(pts_lats) * np.sin(dLon)
     y = pts_rs * (np.sin(pts_lats) * np.cos(obs_lat) - np.cos(pts_lats)*np.cos(dLon)*np.sin(obs_lat))
     z = pts_rs * (np.sin(pts_lats) * np.sin(obs_lat) + np.cos(pts_lats)*np.cos(dLon)*np.cos(obs_lat))
             
-    # Convert to projected vals
+    # |----------------------------------|
+    # |---- Cartesian to Proj Angles ----|    
+    # |----------------------------------|
     d = np.sqrt(x**2 +  y**2 + (obs_r-z)**2)
     if mywcs['cunit'][0].lower() == 'arcsec':
         rad2unit = rad2arcsec
@@ -1526,13 +1987,17 @@ def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None, printIt=Fals
     dthetax = np.arctan2(x, obs_r - z) * rad2unit 
     dthetay = np.arcsin(y/d)* rad2unit  
     
+    # |---------------------------------|
+    # |---- Pixels from WCS Routine ----|    
+    # |---------------------------------|
     coord = wcs_get_pixel(mywcs, [dthetax, dthetay], doQuick=False)
-
-    
-    # Check if we want to throw out the points that would be behind the occulter
-    outs = np.array([coord[0,:], coord[1,:]]).transpose()
+    # Repackage
     thetax, thetay = coord[0,:], coord[1,:]
-        
+    
+    # |-----------------------|
+    # |---- Add Occulting ----|    
+    # |-----------------------|    
+    # Check if we want to throw out the points that would be behind the occulter   
     if occultR: 
         dProj = np.sqrt(dthetax**2 +  dthetay**2)
         outs = []
@@ -1549,30 +2014,52 @@ def pts2proj(pts_in, obs, scale, mywcs, center=[0,0], occultR=None, printIt=Fals
 # |--------------- Set up GUI from reload file ----------------|
 # |------------------------------------------------------------|
 def reloadIt(rD):
-    # Set the wf params
+    """
+    Function to reload the GUI from a save file 
+    
+    Inputs:
+       rD:  a reload dictionary read in from a save file in processReload
+            (in wombatWrapper.py)
+    
+    Effects:
+            Set wireframe and background parameters to the values they 
+            had when the save file was generated
+        
+    """
+    # |----------------------------------|
+    # |---- Set Wireframe Parameters ----|    
+    # |----------------------------------|
+    
+    #|---- Loop through each wireframe ----|
     for i in range(nwfs):
         ii = str(i+1)
+        #|---- Determine type ----|
         if 'WFtype'+ii in rD:
             WFid = WFname2id[rD['WFtype'+ii]]
             wfs[i]  = wf.wireframe(rD['WFtype'+ii])
             mainwindow.cbs[i].setCurrentIndex(WFid)
-            # get the expected labels
+            
+            #|---- Check for params by label ----|
             for j in range(len(wfs[i].labels)):
                 thisLab = wfs[i].labels[j]
                 spIdx = thisLab.find(' ')
                 shortStr = thisLab[:spIdx]+ii
+                # If found reset the wf param value and the widges
                 if shortStr in rD:
                     wfs[i].params[j] = float(rD[shortStr])
                     mainwindow.widges[i][0][j].setText(str(wfs[i].params[j]))
+                # Update the slider too
                 myRng = wfs[i].ranges[j]
                 dx = (myRng[1] - myRng[0]) / (mainwindow.nSliders - 1)
                 x0 = myRng[0]
                 slidx = int((float(wfs[i].params[j]) - x0)/dx)
                 mainwindow.widges[i][1][j].setValue(slidx)
-                #mainwindow.b2s(mainwindow.widges[i][1][0], mainwindow.widges[i][0][0], mainwindow.i2fs[i][0], wfs[i].ranges[0][0],mainwindow.nSliders, wfs[i], mainwindow.widges[i])
+            #|---- Show this wireframe ----|
             mainwindow.updateWFpoints(wfs[i], mainwindow.widges[i])
 
-    # Set the fig params
+    # |-----------------------------------|
+    # |---- Set Background Parameters ----|    
+    # |-----------------------------------|
     for i in range(nSats):
         ii = str(i+1)
         myscl = int(rD['Scaling'+ii])
@@ -1586,16 +2073,34 @@ def reloadIt(rD):
 # |-------------------- Setup Time Indices --------------------|
 # |------------------------------------------------------------|
 def sortTimeIndices(satStuff, tRes=20):
-    # Set a default range of 20 minutes
+    """
+    Function to take sets of disjointed times for (possibly) multiple 
+    instruments and assign everyone to the time slider indices
     
-    #nPerObs = []
-    #for aSat in satStuff: # refrained from using aSS instead of aSat. mostly
-    #    nPerObs.append(len(aSat))
-    #maxTimes = np.max(nTimes)
-    #whoMost  = np.where(np.array(nTimes) == maxTimes)[0][0]
-    # get the min/max for each, might need to change max times if wildly diff
+    Inputs:
+       satStuff: array of satStuff dictionaries for all insts
     
+    Optional Inputs:
+        tRes:    time slider resolution in minutes
+                 defaults to 20 minutes
+    
+    Returns:
+        nTimes:  number of time steps in the time slider
+    
+        tlabs:   string labels for each step in the time slider
+    
+        tmaps:   array of indice maps between time slider and a set
+                 of instrument data. 
+                 e.g. for single indice maps -> [0, 1, 1, 2, 3, 4, 4]  
+                 where 10 slider indices map to 5 observational indices        
+    """
+    
+    # |--------------------------------|
+    # |------ Collect Everything ------|    
+    # |--------------------------------|
+    # Nested array of all times by instrument
     allTimes = []
+    # Min/max time for each instrument
     allMins  = []
     allMaxs  = []
     for j in range(len(satStuff)):
@@ -1611,15 +2116,21 @@ def sortTimeIndices(satStuff, tRes=20):
         allMins.append(myTimes[0])
         allMaxs.append(myTimes[-1])
         allTimes.append(np.array(myTimes))
-        
-    # check that times are actually overlapping, probably not entirely necessary
-    # but want to make sure aren't passed wildly separate times that will turn the
-    # time slider into chaos
+    
+    # |-------------------------------|
+    # |------ Check Overlapping ------|    
+    # |-------------------------------|    
+    # Probably not entirely necessary but want to make sure aren't passed wildly 
+    # separate times that will turn the time slider into chaos
     for i in range(len(allMins)):
         for j in range(len(allMins)-1):
             if allMaxs[i] < allMins[j+1]:
                 sys.exit('Exiting from sortTimeIndices, observation times should be overlapping')
     
+    # |--------------------------------|
+    # |------ Set up slider vals ------|    
+    # |--------------------------------|
+    # Overall min/max and range
     totMin = np.min(allMins)
     totMax = np.max(allMaxs)
     totRng = (totMax - totMin).total_seconds() / 60.
@@ -1639,7 +2150,12 @@ def sortTimeIndices(satStuff, tRes=20):
     DTgeneral = np.array(DTgeneral)
     tlabs = np.array(tlabs)
     
-    # Find the closest match between slider and obs times
+    # |-----------------------------------|
+    # |------ Match obs2sli indices ------|    
+    # |-----------------------------------|
+    # For each slider time find the closer match in observations
+    # for each instrument. Likely that multiple sli idx may be assigned
+    # to the same obs, especially if time cadences dont match well
     tmaps = []
     for j in range(len(satStuff)):
         myTimes = allTimes[j]
@@ -1656,66 +2172,137 @@ def sortTimeIndices(satStuff, tRes=20):
 # |------------------- Main Launch Function -------------------|
 # |------------------------------------------------------------|
 def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadDict=None):
-    # Maintain a limited number of global variables to make passing things easier
-    # (had to move into releaseTheWombats after function-ifying)
-    # main window = the parameter window
-    # pws = array of plot windows
-    # wfs = array of wireframes in theoryland coords
-    # bmodes = array of integer background scaling modes, defaults to linear = 0
-    #global mainwindow, pws, nSats, wfs, nwfs, bmodes
+    """
+    Main wrapper function to build and run the WOMBAT GUI
+
+    Inputs:
+        obsFiles: nested lists of maps and headers that releaseTheWombat uses to
+                  set up the background images in the form [inst1, inst2, ...] 
+                  where each insts is an array of [[maps], [hdrs]] where maps and 
+                  hdrs are time series of the obs  maps and their corresponding headers 
+                  (e.g. [[[COR2Amap1, COR2Amap2, ...], [COR2Ahdr1, COR2Ahdr2, ...]]
+                         [[C2map1, C2map2, ...], [C2Ahdr1, C2hdr2, ...]]
+                         [[AIA171map1, AIA171map2, ...], [AIA171hdr1, AIA171hdr2, ...]]])
+    Optional Inputs:
+        nWFs:         number of wireframes. Currently set an upper limit of 10 to keep
+                      GUI from becoming overloaded
+                      defaults to 1
     
+        overviewPlot: flag to include the polar/top-down overview panel showing the relative
+                      locations of the Sun, Earth, satellites, and wireframes
+                      defaults to False
+        
+        labelPWs:     flag to label plot windows with the sat/inst and the date
+                      string on the bottom of the panel
+                      defaults to True
+    
+        reloadDict:   option to pass a reloadDictionary (from processReload in
+                      wombatWrapper.py) to relaunch the GUI from a previous state
+                      defaults to None (aka no reload)
+
+    Outputs:
+        No outputs unless the save button is clicked. If clicked, it will save fits files
+        for the backgrounds (processed as RD/BD) in wbFits/reloads and in wboutputs it
+        will save wombatSummaryFile.txt which can be used to reload the current setup and
+        a png file for each observation panel and one for the overview panel (if present)
+
+
+    ***Avoided creating globals in any of the other functions but its much easier
+    to maintain a limited number created here to make passing things easier***
+        mainWindow: the parameter window
+        pws:        array of plot windows
+        nSats:      number of sats/instruments = number of plot windows
+        wfs:        array of wireframes in theoryland coords
+        nwfs:       number of wireframes
+        bmodes:     array of integer background scaling modes, defaults to linear = 0
+        occultDict: dictionary of (rough) inner/outer boundaries of each inst FOV
+        WFname2id:  wireframe name to their index number in the WF combo boc
+  
+    """
+
+    #|-----------------------------| 
+    #|---- Dictionary Globals -----|
+    #|-----------------------------|
     global occultDict, WFname2id
     # Nominal radii (in Rs) for the occulters for each instrument. Pulled from google so 
     # generally correct (hopefully) but not the most precise
     occultDict = {'STEREO_SECCHI_COR2':[3,14], 'STEREO_SECCHI_COR1':[1.5,4], 'SOHO_LASCO_C1':[1.1,3], 'SOHO_LASCO_C2':[2,6], 'SOHO_LASCO_C3':[3.7,32], 'STEREO_SECCHI_HI1':[15,80], 'STEREO_SECCHI_HI2':[80,215], 'STEREO_SECCHI_EUVI':[0,1.7],'SDO_AIA':[0,1.35]} 
+    # Wireframe name to combo box index 
     WFname2id = {'GCS':1, 'Torus':2, 'Sphere':3, 'Half Sphere':4, 'Ellipse':5, 'Half Ellipse':6, 'Slab':7}
     
     
+    #|-----------------------------| 
+    #|---- Other Global Setup -----|
+    #|-----------------------------|
     global mainwindow, pws, nSats, wfs, nwfs, bmodes, ovw
     
-    # obsFiles should have 1 array for each satellite
+    #|---- Pull sat number from obsFiles ----|
     nSats = len(obsFiles)
+    
 
-    # each sat array then [[ims], [hdrs]]
+    #|------------------------------| 
+    #|---- Initiate Wireframes -----|
+    #|------------------------------|
+    # To Reload
     if type(reloadDict) != type(None):
         nwfs = reloadDict['nWFs']
+    # Or not to reload
     else:
         nwfs = nWFs
+    # Load up noneType WFs
     wfs = [wf.wireframe(None) for i in range(nwfs)]
     
-    # Find the min/max for each type of plot range
+
+    #|-----------------------------| 
+    #|---- Setup observations -----|
+    #|-----------------------------|
     sclIms = []    
     satStuff = []
     multiTime = False
+    #|---- Loop through insts ----|
     for i in range(nSats):
         satScls = []
         someStuff = []
         tNum = len(obsFiles[i][0])
+        # If anyone has more than 1 then multitime mode
         if tNum > 1:
             multiTime = True
+            
+        #|---- Process each time step header ----|    
         for j in range(tNum): 
             mySatStuff = getSatStuff(obsFiles[i][0][j])
             someStuff.append(mySatStuff)
-            
+        
+        #|---- Get scaled versions of the data ----|     
         mySclIms, someStuff = makeNiceMMs(obsFiles[i], someStuff)    
-                        
+        
+        #|---- Stuff in array ----|                 
         sclIms.append(mySclIms)
         satStuff.append(someStuff)
     
+
+    #|---------------------------------| 
+    #|---- Setup time slider vals -----|
+    #|---------------------------------|
     if multiTime:
         nTsli, tlabs, tmaps = sortTimeIndices(satStuff)
     else:
         nTsli = 0
         tlabs = None
     
-    
-    # Get the max FoV from the satStuff so we can adjust height slider appropriately
+
+    #|--------------------------------| 
+    #|---- Get height slider max -----|
+    #|--------------------------------|
+    # Optimal range of height slider depends on what observations 
+    # we have. Take the max corner dist ('FOV') from each inst
+    # and convert it to a nice number
     maxFoV = 0
     for stuff in satStuff:
         if stuff[0]['FOV'] > maxFoV: maxFoV = stuff[0]['FOV']
     # pad it a bit then round to a nice number
     maxFoV = int((1.1 * maxFoV) / 5) * 5
-    # EUV only will pull 0 for this, just set higher
+    # EUV only will pull 0 for this^, just set higher if < 1
     if maxFoV < 1:
         maxFoV = 1.5
     # Edit the dictionaries in wombatWF
@@ -1726,21 +2313,28 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
         wf.defDict['Height (Rs)'] = 1.5
             
     
-    # Start the application
+    #|-----------------------------| 
+    #|---- Launch Application -----|
+    #|-----------------------------|
     app = QApplication(sys.argv)
     
-    # Launch obs windows
+
+    #|------------------------------| 
+    #|---- Launch Plot Windows -----|
+    #|------------------------------|
     pws = []
     for i in range(nSats):
         if multiTime:
             myTmap = tmaps[i]
         else:
             myTmap = [0]
-        pw = FigWindow('Sat1', obsFiles[i], sclIms[i], satStuff[i], myNum=i, labelPW=labelPW, tmap=myTmap)
+        pw = FigWindow(obsFiles[i], sclIms[i], satStuff[i], myNum=i, labelPW=labelPW, tmap=myTmap)
         pw.show()
         pws.append(pw) 
     
-    # Launch the overview panel (if turned on)
+    #|---------------------------------| 
+    #|---- Launch Overview Window -----|
+    #|---------------------------------|
     if overviewPlot:
         ovw = OverviewWindow(satStuff)
         ovw.show()
@@ -1748,11 +2342,16 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
         ovw = None
     
     
-    # Launch the parameter panel    
+    #|----------------------------------| 
+    #|---- Launch Parameter Window -----|
+    #|----------------------------------|
     mainwindow = ParamWindow(nwfs, tlabs=tlabs)
     mainwindow.show()
     
-    # Set to values from reload file if passed
+
+    #|---------------------------------| 
+    #|---- Set values from reload -----|
+    #|---------------------------------|
     if type(reloadDict) != type(None):
         reloadIt(reloadDict)
 

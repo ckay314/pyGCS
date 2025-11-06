@@ -729,4 +729,4 @@ def runWombat(args, overviewPlot=True):
     releaseTheWombat(allFH, reloadDict=reloadDict, overviewPlot=overviewPlot)   
         
 if __name__ == '__main__':
-    runWombat(sys.argv, overviewPlot=False)
+    runWombat(sys.argv, overviewPlot=True)

@@ -1,5 +1,39 @@
+#!/usr/bin/env python
+
+"""
+Module with all the wireframe calculations for wombat
+
+This file starts with a series of dictionaries defining various properties 
+of how the wireframes appear in the GUI. These can be edited to change
+the default configurations. These include
+    
+    colorDict:   HTML color codes for each wireframe type
+    
+    bonusColors: More HTML colors to cycle through when there are multiple
+                 instances of the same WF type
+    
+    gridDict:    number of points in the WF grid for each type
+
+    rngDict:     default range for the parameter sliders by WFtype
+
+    rngDictHI:   ranges to change from rngDict if using HI obs
+
+    defDict:     the default/starting value for each parameter
+
+The first three are purely aesthetic and can be modified as needed (with reasonable
+limits on the grid resolution). The other three can be tuned if needed but probably
+should be left alone for the most part. The code below the dictionaries and imports
+should not be edited for funsies.
+
+"""
+
+
+# |---------------------------------------------------------------------|
+# |---------------------------------------------------------------------|
 # |---------------------------------------------------------------------|
 # |------ Things that can be edited to customize the GUI interface -----|
+# |---------------------------------------------------------------------|
+# |---------------------------------------------------------------------|
 # |---------------------------------------------------------------------|
 
 # Dictionary for the colors of the wireframe objects by type
@@ -22,8 +56,12 @@ gridDict = {'GCS':[5,15,30], 'Torus':[30,25], 'Sphere':[50,25], 'Half Sphere':[2
 
 
 # |---------------------------------------------------------------------|
+# |---------------------------------------------------------------------|
+# |---------------------------------------------------------------------|
 # |--------- Things that can be edited to customize the defaults -------|
 # |------------- (Only change these if you understand them!) -----------|
+# |---------------------------------------------------------------------|
+# |---------------------------------------------------------------------|
 # |---------------------------------------------------------------------|
 # The default ranges for each of the parameter options
 # These will be more COR appropriate than HI appropriate but will
@@ -38,52 +76,80 @@ defDict = {'Height (Rs)':10, 'Lon (deg)':0, 'Lat (deg)':0, 'Tilt (deg)':0, 'AW (
 
 
 
-# |---------------------------------------------------------------------|
+# |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!|
+# |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!|
+# |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!|
 # |---------------------------------------------------------------------|
 # |------------- Things that probably shouldn't be touched -------------|
 # |---------------------------------------------------------------------|
-# |---------------------------------------------------------------------|
+# |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!|
+# |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!|
+# |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!|
 
-# imports
+
+#|-----------------|
+#|---- Imports ----|
+#|-----------------|
 import numpy as np
 import sys
 
-from pyGCS import getGCS
+
+#|-----------------|
+#|---- Globals ----|
+#|-----------------|
+global dtor, radeg, pi, npDict
+
+dtor  = np.pi / 180.
+radeg = 180. / np.pi
+pi    = np.pi 
 
 # Dictionary for the number of points per WF type
 npDict = {'GCS': 6, 'Torus': 8, 'Sphere':4, 'Half Sphere':4, 'Ellipse':7, 'Half Ellipse':7, 'Slab':9}
 
-# Useful globals
-global dtor, radeg, pi
-dtor  = np.pi / 180.
-radeg = 180. / np.pi
-pi    = np.pi 
+
 
 #|-------------------------------|
 #|---- Geometry helper funcs ----|
 #|-------------------------------|
 def rotx(vec, ang):
-# Rotate a 3D vector by ang (input in degrees) about the x-axis
+    """
+    
+    Rotate a 3D vector by ang (input in degrees) about the x-axis 
+    
+    """
     ang *= dtor
     yout = np.cos(ang) * vec[1] - np.sin(ang) * vec[2]
     zout = np.sin(ang) * vec[1] + np.cos(ang) * vec[2]
     return [vec[0], yout, zout]
 
 def roty(vec, ang):
-# Rotate a 3D vector by ang (input in degrees) about the y-axis
+    """
+    
+    Rotate a 3D vector by ang (input in degrees) about the y-axis 
+    
+    """
     ang *= dtor
     xout = np.cos(ang) * vec[0] + np.sin(ang) * vec[2]
     zout =-np.sin(ang) * vec[0] + np.cos(ang) * vec[2]
     return [xout, vec[1], zout]
 
 def rotz(vec, ang):
-# Rotate a 3D vector by ang (input in degrees) about the y-axis
+    """
+    
+    Rotate a 3D vector by ang (input in degrees) about the z-axis 
+    
+    """
 	ang *= dtor
 	xout = np.cos(ang) * vec[0] - np.sin(ang) * vec[1]
 	yout = np.sin(ang) * vec[0] + np.cos(ang) * vec[1]
 	return [xout, yout, vec[2]]
 
 def SPH2CART(sph_in):
+    """
+    
+    Conversion between spherical and cartesian coordinates
+    
+    """
     r = sph_in[0]
     colat = (90. - sph_in[1]) * dtor
     lon = sph_in[2] * dtor
@@ -98,15 +164,62 @@ def SPH2CART(sph_in):
 # |---------------------------------------------------------------------|
 # |--------- Parameters for each wireframe and their order -------------|
 # |---------------------------------------------------------------------|
-# GCS parameters - height, lon, lat, tilt, AW, kappa,  (6)
-# Half torus - height, lon, lat,  tilt, AW, deltaAx, deltaCS (7) [add rot about nose?]
-# Sphere/Half sphere - height, lon, lat,  AW (4)
-# Ellipse/Half ellipsoid - height, lon, lat,  tilt, AW, epp (6)
-# Slab - height, lon, lat, roll (~tilt), yaw (~lon), pitch (~lat),  Lx, Ly, Lz,  (9)
 
 class wireframe():
-    "Container to hold all the parameters and the points for a wireframe object"
+    """
+    Class for a wireframe object that holds all the useful parameters and
+    labels as well as the calculated points and the methods to calculate them.
+    The points are calculated in 'Theoryland' with the shape directed along the
+    x-axis then rotate into Stonyhurst Cartesian
+    
+    Inputs:
+        WFtype: the type of WF object (can be GCS, Torus, Sphere, Half Sphere, 
+                Ellipse, Half Ellipse, or Slab)  
+    
+    Optional Inputs:
+        WFidx:  an identifying index of this WF object (useful for external functions)   
+    
+    The parameters for each WF type are:
+        GCS parameters - height, lon, lat, tilt, AW, kappa,  (6)
+        (Half) torus - height, lon, lat,  tilt, AW, deltaAx, deltaCS (7) [add rot about nose?]
+        Sphere/Half sphere - height, lon, lat,  AW (4)
+        Ellipse/Half ellipsoid - height, lon, lat,  tilt, AW, epp (6)
+        Slab - height, lon, lat, roll (~tilt), yaw (~lon), pitch (~lat),  Lx, Ly, Lz,  (9)
+        *** note that the params will be store in this exact order
+    
+    We also include a None type option to make a structure as a placeholder without
+    any assigned parameters
+    
+     
+    """
     def __init__(self, WFtype, WFidx=-1):
+        """
+        Initial set up for a wireframe object 
+        
+        Inputs:
+            WFtype: the type of WF object (can be GCS, Torus, Sphere, Half Sphere, 
+                    Ellipse, Half Ellipse, or Slab)  
+    
+        Optional Inputs:
+            WFidx:  an identifying index of this WF object (useful for external functions)   
+    
+        The parameters for each WF type are:
+            GCS parameters - height, lon, lat, tilt, AW, kappa,  (6)
+            (Half) torus - height, lon, lat,  tilt, AW, deltaAx, deltaCS (7) [add rot about nose?]
+            Sphere/Half sphere - height, lon, lat,  AW (4)
+            Ellipse/Half ellipsoid - height, lon, lat,  tilt, AW, epp (6)
+            Slab - height, lon, lat, roll (~tilt), yaw (~lon), pitch (~lat),  Lx, Ly, Lz,  (9)
+            *** note that the params will be store in this exact order
+   
+        We also include a None type option to make a structure as a placeholder without
+        any assigned parameters
+    
+     
+        """
+        
+        #|-------------------------------|
+        #|---- Setup Attribute Names ----|
+        #|-------------------------------|
         self.WFtype   = WFtype
         self.showMe   = False
         if type(WFtype) != type(None):
@@ -124,21 +237,32 @@ class wireframe():
             self.WFidx  = WFidx
             
         
+        #|-------------------------------|
+        #|---- Fill if not None Type ----|
+        #|-------------------------------|
         if WFtype != None:
-            # Set up labels
+            # |---- Set up labels ----|
             self.setLabels()
-            # Set up default ranges/parameters/grid points 
+            # |---- Set up default values ----|
             self.setDefs()
-            # Set up the number of grid points based on WF type
+            # |---- Set up grid points ----|
             self.gPoints = gridDict[WFtype]
         
-            # Calc points - get the WF structure in theoryland
+            # |---- Calc points ----|
+            # Get WF points in Stony Cartesian
             self.getPoints()
         
     # |-----------------------------------------------------------------|
     # |--- Set up the text that will go above the sliders/text boxes ---|
     # |-----------------------------------------------------------------|
     def setLabels(self):
+        """
+        Function that returns the parameter labels for a given WF type
+        
+        This could probably just be a dictionary. But its not.
+        
+        """
+        
         # Set up the text that will go above the sliders/text boxes
         WFtype = self.WFtype
         if WFtype == 'GCS':
@@ -158,6 +282,13 @@ class wireframe():
     # |-------------------  and their default values -------------------|
     # |-----------------------------------------------------------------|
     def setDefs(self):
+        """
+        Function that returns the ranges and starting values for 
+        the parameter sliders.
+        
+        This just calls the dictionaries
+        
+        """
         # Start with COR defaults, will adjust if we include HI obs
         for i in range(self.nParams): 
             label = self.labels[i]
@@ -169,15 +300,26 @@ class wireframe():
     # |--------- Calculate the shape in Stonyhurst Cartestian ----------|
     # |-----------------------------------------------------------------|
     def getPoints(self):
+        """
+        Function that calculates the position of each point in the
+        wireframe grids. Just a lot of geometry.
+        
+        """
+        
+        # |---- Get type/parameters/grid ----|
         WFtype = self.WFtype
         ps = self.params
         gps = self.gPoints
         
+        # |-------------------------------------------------------|
+        # |-------------------------------------------------------|
+        # |------ Run geometrical calculation based on type ------|
+        # |-------------------------------------------------------|
+        
         # |---------------------------|
         # |------ GCS Wireframe ------|
         # |---------------------------|
-        if WFtype == 'GCS': 
-           
+        if WFtype == 'GCS':           
            # Refine param names to reuse existing code
            lon, lat, tilt, hin, k, alpha = ps[1], ps[2], ps[3], ps[0], ps[5], ps[4]*dtor
            nleg, ncirc, ncross = gps[0], gps[1], gps[2]
@@ -318,9 +460,9 @@ class wireframe():
             # Convert from theoryland to StonyCart
             self.points = np.transpose(rotz(roty(sphere, -ps[2]), ps[1]))  
             
-        # |---------------------------|
+        # |-------------------------|
         # |------ Ellipse F/H ------|
-        # |---------------------------|
+        # |-------------------------|
         elif WFtype in ['Ellipse', 'Half Ellipse']: 
             if WFtype == 'Ellipse':
                 thetas = np.linspace(-pi, pi, gps[0], endpoint=True)
@@ -405,25 +547,3 @@ class wireframe():
             # Move in lat/lon
             self.points = np.transpose(rotz(roty(xyz, -lat), lon))  
             
-
-            
-           
-
-        
-'''wfGCS = wireframe('Torus')
-#print (wfGCS.labels)
-#print (wfGCS.ranges)
-#print (wfGCS.params)
-
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-
-pts = np.transpose(wfGCS.points)
-ax.scatter(pts[0], pts[1], pts[2])
-ax.set_xlim(-15,15)
-ax.set_ylim(-15,15)
-ax.set_zlim(-15,15)
-plt.show()'''
-
