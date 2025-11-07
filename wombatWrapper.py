@@ -27,14 +27,14 @@ Usage:
 
     To launch mode 2 use
     
-         python3 wombatWrapper.py time1 time2 inst1... instN EXTRA1 EXTRA2
+         python3 wombatWrapper.py time1 time2 inst1... instN EXTRA1 EXTRA2 EXTRA3
 
     where time1/2 are the start/end time formated anyway accepted by Sunpy parse_time
     and inst1->instN are N instrument tags, selecting from the options below with no
     requirements on capital/lowercase letters. You can also pass two extra keywords
-    (represented by EXTRA1 EXTRA2) but these are not required. The two options are 
-    the difference mode (either RD or BD) or a tRes, which would be the time resolution
-    in minutes to use for pulling (processed) observations.
+    (represented by the three EXTRA) but these are not required. The three options are 
+    the difference mode (either RD or BD), tRes,  the time resolution in minutes to use 
+    for pulling (processed) observations, and nWF, the number of wireframes
 
 
         
@@ -287,10 +287,19 @@ def fits2maps(filesIn, names, diffMode='RD', diffEUV=False):
                         allFH[i][1].append(myHdr)
                     else:
                         print ('Skipping file -- mismatch in size for ' + names[i] + allFH0[i][1][j+1]['DATE-OBS'])
+        elif len(allFH0[i][0]) == 0:
+            print ('No files found for ' +  names[i] )
                         
         # Return if trying to make a difference from a single file    
         else:
             print ('Cannot make diff for '+ names[i]+ ' from only a single file')
+        
+        # Make sure we have some files, exit if none
+        tots = 0
+        for item in allFH:
+            tots += len(item[0])
+        if tots == 0:
+            sys.exit('No observations found for any instrument, exiting...')
     
     return allFH
 
@@ -573,7 +582,8 @@ def findFiles(timesIn, insts, nMax=20, obsFold='wbFits/', diffMode='RD', diffEUV
 # |------------------------------------------------------------|
 def runWombat(args, overviewPlot=True):
     """
-    Main wrapper to run the wombat gui from a list of arguments
+    Main wrapper to run the wombat gui from a list of arguments, either from an external
+    program or by calling wombatPullObs.py at the command line
     
     This accepts a list of arguments and automatically determines how to run
     wombat using one of three methods. The three possible modes are:
@@ -603,14 +613,14 @@ def runWombat(args, overviewPlot=True):
 
         To launch mode 2 use
     
-              runWombat([time1 time2 inst1... instN EXTRA1 EXTRA2])
+              runWombat([time1 time2 inst1... instN EXTRA1 EXTRA2 EXTRA3])
 
         where time1/2 are the start/end time formated anyway accepted by Sunpy parse_time
         and inst1->instN are N instrument tags, selecting from the options below with no
-        requirements on capital/lowercase letters. You can also pass two extra keywords
-        (represented by EXTRA1 EXTRA2) but these are not required. The two options are 
-        the difference mode (either RD or BD) or a tRes, which would be the time resolution
-        in minutes to use for pulling (processed) observations.    
+        requirements on capital/lowercase letters. You can also pass three extra keywords
+        (represented by the three EXTRA) but these are not required. The three options are 
+        the difference mode (either RD or BD), T#,  the time resolution in minutes to use
+        for pulling (processed) observations, and n#, the number of wireframes
                  Available inst tags:
                         AIAnum  = SDO AIA where num represents a wavelength from [94, 131, 171*, 
                                   193*, 211, 304*, 335, 1600, 1700] with * most common
@@ -652,18 +662,22 @@ def runWombat(args, overviewPlot=True):
     diffMode = 'RD'
     tRes = None
     toRm = 0
+    nWFs  = 1 
     if len(args) > 1:
-        for i in [-1,-2]:
-            val = args[i]
-            if val.upper() in ['BD', 'RD']:
-                diffMode = val.upper()
-                toRm +=1
-            else:
-                try: 
-                    tRes = int(val)
-                    toRm +=1
-                except:
-                    pass
+        for i in [-1,-2, -3]:
+            if len(args) > -i:
+                val = args[i].upper()
+                if val.upper() in ['BD', 'RD']:
+                    diffMode = val
+                    toRm += 1
+                # Check if has a T but not long enough to be a datetime    
+                elif ('T' in val) and (len(val) < 5):
+                    tRes = int(val.replace('T',''))
+                    toRm += 1
+                elif 'N' in val:
+                    nWFs = int(val.replace('N',''))
+                    toRm += 1
+                
     if toRm > 0:
         args = args[:-toRm]
     
@@ -725,7 +739,7 @@ def runWombat(args, overviewPlot=True):
     # |-----------------------------------------------|
     # |----------- Launch the WOMBAT GUI -------------|
     # |-----------------------------------------------|    
-    releaseTheWombat(allFH, reloadDict=reloadDict, overviewPlot=overviewPlot, nWFs=2)   
+    releaseTheWombat(allFH, reloadDict=reloadDict, overviewPlot=overviewPlot, nWFs=nWFs)   
         
 if __name__ == '__main__':
     runWombat(sys.argv, overviewPlot=True)

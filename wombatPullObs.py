@@ -707,7 +707,6 @@ def pullWISPR(times, insts, HItime=30, outFolder='pullFolder/'):
     
 
 
-
 # |------------------------------------------------------------|
 # |------------ Main function to pull observations ------------|
 # |------------------------------------------------------------|
@@ -846,11 +845,138 @@ def pullObs(times, insts, outFolder='pullFolder/', EUVtime=10, CORtime=20, HItim
         pullSoloHI(times, doSoloHI, HItime=HItime, outFolder=outFolder)
         
 
-if __name__ == '__main__':
-    startT = '2023/09/24T16:00'
-    endT   = '2023/09/24T18:00'
+# |------------------------------------------------------------|
+# |-------------------- Command Line Wrapper ------------------|
+# |------------------------------------------------------------|
+def commandLineWrapper():
+    """
+    Wrapper to only be used to make wombatPullObs run from the command line using
+    a list of arguments. Any external program should call pullObs directly
+
+    Inputs:
+        None to the function itself, but will pull the sys.argv. The possible arguments
+        are the relevant time range, the desired instruments, time resolutions, and
+        an output directory. The time range and instruments are requires and the others
+        are all optional. The arguments have form
+        
+        Required:
+            starting time - YYYY-MM-DDTHH:MM recommended, but anything supported by
+                            parse_time from sunpy will work.
+                            *** must be first argument after wombatPullObs.py ***
+
+            ending time -   YYYY-MM-DDTHH:MM recommended, but anything supported by
+                            parse_time from sunpy will work.
+                            *** must be second argument after wombatPullObs.py ***
+            
+            inst tags -     instrument tags to search for from the following list
+                            can be multiple tags, not just a single
+                            *** must appear directly after ending time ***
+        Optional:
+            EUVt -          time resolution in minutes for EUV observations.
+                            provided as EUVIt# with no space (e.g EUVI10)
+                            defaults to 10 minutes
+            
+            CORt -          time resolution in minutes for COR observations   
+                            provided as CORt# with no space (e.g COR20)
+                            defaults to 20 minutes
+     
+            HIt -           time resolution in minutes for HI observations   
+                            provided as HIt# with no space (e.g HI30)
+                            defaults to 30 minutes
+            
+            outFolder -     top directory where the files will be saved in their
+                            appropriate subfolders
+                            defaults to pullFolder/
     
-    times = [startT, endT]
-    sats  = [ 'EUVI171A']
-    pullObs(times, sats)
+        
+        Available Instrument Tags:
+            AIAnum  = SDO AIA where num represents a wavelength from [94, 131, 171*, 
+                      193*, 211, 304*, 335, 1600, 1700] with * most common
+            C2      = LASCO C2
+            C3      = LASCO C3
+            COR1    = STEREO COR1
+            COR2    = STEREO COR2    
+            EUVInum = STEREO EUVI where num is a wavelength from [171, 195, 284, 304]
+            HI1     = STEREO HI1
+            HI2     = STEREO H2
+            SoloHI  = All quadrants from Solar Orbiter HI
+            SoloHI1 = Quadrant 1 from Solar Orbiter HI
+            SoloHI2 = Quadrant 2 from Solar Orbiter HI
+            SoloHI3 = Quadrant 3 from Solar Orbiter HI
+            SoloHI4 = Quadrant 4 from Solar Orbiter HI
+            WISPR   = Both inner and outer from PSP WISPR
+            WISPRI  = Inner only from PSP WISPR
+            WISRPO  = Outer only from PSP WISPR
+            * all STEREO values will both pull A and B (as available) if written as 
+            above but one can add the A/B tag on the end (e.g. COR2A) to select a
+            single STEREO
+    
+        Actions:
+            Calls processObs
+        
+    """
+    #|---- All the instrument tags ----|
+    tags = ['AIA94', 'AIA131', 'AIA171','AIA193','AIA211','AIA304','AIA335','AIA1600','AIA1700', 'C2', 'C3', 'COR1', 'COR2', 'COR1A', 'COR2A', 'COR1B', 'COR2B', 'EUVI171', 'EUVI195', 'EUVI284', 'EUVI304', 'EUVI171A', 'EUVI195A', 'EUVI284A', 'EUVI304A', 'EUVI171B', 'EUVI195B', 'EUVI284B', 'EUVI304B', 'HI1', 'HI2', 'HI1A', 'HI2A', 'HI1B', 'HI2B', 'SOLOHI', 'SOLOHI1', 'SOLOHI2', 'SOLOHI3', 'SOLOHI4', 'WISPR', 'WISPRI', 'WISPRO']
+    
+    #|---- Pull the command line args ----|
+    vals = sys.argv[1:]
+    
+    #|---- Pull times and check format ----|
+    try:
+        temp = parse_time(vals[0])
+    except:
+        print('Error in start time format')
+    try:
+        temp = parse_time(vals[1])
+    except:
+        print('Error in end time format')
+    times = [vals[0], vals[1]]
+    
+    vals = vals[2:]
+    
+    #|---- Set defaults for optional args ----|
+    EUVt = 10
+    CORt = 20
+    HIt  = 30
+    outFolder = 'pullFolder/'
+    
+    #|---- Check back end for optional args ----|
+    toRm = 0
+    for i in [-1,-2,-3,-4]:
+        if len(vals) > i:
+            val = vals[i]
+            if 'EUVT' in val.upper():
+                EUVt = int(val.upper().replace('EUVT', ''))
+                toRm += 1
+            elif 'CORT' in val.upper():
+                CORt = int(val.upper().replace('CORT', ''))
+                toRm += 1
+            elif 'HIT' in val.upper():
+                HIt = int(val.upper().replace('HIT', ''))
+                toRm += 1
+            else:
+                if val.upper() not in tags:
+                    if os.path.isdir(val):
+                        outFolder = val
+                        toRm += 1
+                    else:
+                        sys.exit('Cannot find output folder '+val)
+                    
+    # |---- Remove the optional args ----|               
+    if toRm > 0:
+        vals = vals[:-toRm]
+    
+    insts = []
+    for val in vals:
+        if val.upper() in tags:
+            insts.append(val.upper().replace('SOLO', 'Solo'))  # adjust SoloHi format
+    if len(insts) < 1:
+        sys.exit('No instrument tag provided')
+        
+    pullObs(times, insts, EUVtime=EUVt, CORtime=CORt, HItime=HIt, outFolder=outFolder)    
+            
+        
+
+if __name__ == '__main__':
+    commandLineWrapper()
             

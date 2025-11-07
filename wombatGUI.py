@@ -903,7 +903,9 @@ class FigWindow(QWidget):
                   The obs aren't necessarily uniformly spaced but the t slider is
                   so a map may look like [0, 1, 1, 2, 3, 4, 4] where 10 slider indices
                   map to 5 observational indices. Also helps adjust for different
-                  time resolution for different instruments.        
+                  time resolution for different instruments.      
+         
+        screenXY: size of the computer display in pixels [x,y]. used to help place windows
     
      
     """
@@ -962,34 +964,37 @@ class FigWindow(QWidget):
         if type(screenXY) == type(None):
             self.setGeometry(550*(myNum+1), 350, 450, 450) 
         else:
-            pWinWid = 10 + 300 +50
+            pWinWid = 10 + 300 + 10
             remWid  = screenXY[0] - pWinWid
-            myWid = 475
+            myWid = 465
             # Check if we can fit across
             if remWid > nSats * myWid:
-                myx = 350 + myWid * myNum
-                self.setGeometry(myx, 350, 350, 450) 
+                myx = pWinWid + myWid * myNum
+                self.setGeometry(myx, 100, 350, 450) 
             # Else start stacking
             else:
                 # Figure out max we can put in a row
                 nRow = int(remWid / myWid)
+                if myNum < (2*nRow -1):
+                    # Fill up top row
+                    if myNum < nRow:
+                        myx = pWinWid + myWid * myNum
+                        print ('  ', myNum, myx, 10)
+                        self.setGeometry(myx, 10, 350, 450)
                 
-                # Fill up top row
-                if myNum < nRow:
-                    myx = 350 + myWid * myNum
-                    print ('  ', myNum, myx, 10)
-                    self.setGeometry(myx, 10, 350, 450)
-                
-                # Add remaining to bottom
+                    # Add remaining to bottom
+                    else:
+                        subNum = myNum - nRow
+                        myx = pWinWid + myWid * subNum
+                        myy = int(screenXY[1] / 2)
+                        self.setGeometry(myx, myy, 350, 450)
+                # Too many to organize nicely, give up
                 else:
-                    subNum = myNum - nRow
-                    myx = 350 + myWid * subNum
-                    myy = int(screenXY[1] / 2)
-                    print ('  ', myNum, subNum, myx, myy)
-                    self.setGeometry(myx, myy, 350, 450)
+                    self.setGeometry(550*(myNum+1), 350, 450, 450) 
+                    
                 
                 
-        self.setWindowTitle(self.satName.replace('_',''))        
+        self.setWindowTitle(self.satName.replace('_',' '))        
         
         #|---- Make a layout ----|
         layoutP =  QGridLayout()
@@ -1425,17 +1430,25 @@ class OverviewWindow(QWidget):
         satStuff: an array of all the satStuff dictionaries for all sats
      
     """
-    def __init__(self, satStuff):
+    def __init__(self, satStuff, screenXY=None):
         """
         Class for the overview window showing the relative satellite locations
     
         Inputs:
             satStuff: an array of all the satStuff dictionaries for all sats
+        
+        Optional Inputs:
+            screenXY: size of the computer display in pixels [x,y]. 
+                      used to help place windows
      
         """
         super().__init__()
         
         #|---- Set up/name window ----|
+        if type(screenXY) != type(None):
+            # Not sure why it sets too high using same delta for x and y
+            # but this at least positions nicely on laptop
+            self.setGeometry(screenXY[0] - 400 - 10, screenXY[1] - 100 - 10, 400, 400) 
         self.setFixedSize(400, 400) 
         self.setWindowTitle('Polar View')
         
@@ -2412,7 +2425,7 @@ def releaseTheWombat(obsFiles, nWFs=1, overviewPlot=False, labelPW=True, reloadD
     #|---- Launch Overview Window -----|
     #|---------------------------------|
     if overviewPlot:
-        ovw = OverviewWindow(satStuff)
+        ovw = OverviewWindow(satStuff, screenXY=screenXY)
         ovw.show()
     else:
         ovw = None

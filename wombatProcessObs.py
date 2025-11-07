@@ -464,8 +464,7 @@ def processSoloHI(times, insts, inFolder='pullFolder/SolO/SoloHI/', outFolder='w
     else:
         for i in range(nInsts):
             insts[i] = insts[i].replace('SoloHI','')
-    print (insts)
-
+ 
     # |----------------------------------|
     # |--------- Find the files ---------|
     # |----------------------------------|
@@ -588,6 +587,7 @@ def processSoloHI(times, insts, inFolder='pullFolder/SolO/SoloHI/', outFolder='w
                 # Make if if it doesn't exist
                 os.mkdir(outFolder+'Mosaic/')
             for i in range(len(ims)):
+                print('Processing image',i,'of', len(ims))
                 ymd = hdrs[i]['DATE-OBS'].replace('-','').replace(':','')[:15]  
                 fitsName = 'wbpro_solohiquad_'+ymd+'.fits'      
                 fullName = outFolder+'Mosaic/' + fitsName
@@ -909,7 +909,6 @@ def processWISPR(times, insts, inFolder='pullFolder/PSP/WISPR/', outFolder='wbFi
 
 
 
-
 # |------------------------------------------------------------|
 # |----------- Main function to process observations ----------|
 # |------------------------------------------------------------|
@@ -983,7 +982,7 @@ def processObs(times, insts, inFolder='pullFolder/', outFolder='wbFits/', outFil
     # |---------------------------------------| 
     # |---- Check all inst keys are valid ----|
     # |---------------------------------------| 
-    goods = ['AIA94', 'AIA131', 'AIA171','AIA193','AIA211','AIA304','AIA335','AIA1600','AIA1700', 'C2', 'C3', 'COR1', 'COR2', 'EUVI171', 'EUVI195', 'EUVI284', 'EUVI304', 'HI1', 'HI2', 'COR1A', 'COR2A', 'EUVI171A', 'EUVI195A', 'EUVI284A', 'EUVI304A', 'HI1A', 'HI2A', 'COR1B', 'COR2B', 'EUVI171B', 'EUVI195B', 'EUVI284B', 'EUVI304B', 'HI1B', 'HI2B' 'SoloHI', 'SoloHI1', 'SoloHI2', 'SoloHI3', 'SoloHI4', 'WISPR', 'WISPRI', 'WISPRO']
+    goods = np.array(['AIA94', 'AIA131', 'AIA171','AIA193','AIA211','AIA304','AIA335','AIA1600','AIA1700', 'C2', 'C3', 'COR1', 'COR2', 'EUVI171', 'EUVI195', 'EUVI284', 'EUVI304', 'HI1', 'HI2', 'COR1A', 'COR2A', 'EUVI171A', 'EUVI195A', 'EUVI284A', 'EUVI304A', 'HI1A', 'HI2A', 'COR1B', 'COR2B', 'EUVI171B', 'EUVI195B', 'EUVI284B', 'EUVI304B', 'HI1B', 'HI2B' ,'SoloHI', 'SoloHI1', 'SoloHI2', 'SoloHI3', 'SoloHI4', 'WISPR', 'WISPRI', 'WISPRO'])
     quitIt = False
     for inst in insts:
         if inst not in goods:
@@ -1104,12 +1103,103 @@ def processObs(times, insts, inFolder='pullFolder/', outFolder='wbFits/', outFil
     # |-------------------------------|
     f1.close()
     
+# |------------------------------------------------------------|
+# |-------------------- Command Line Wrapper ------------------|
+# |------------------------------------------------------------|
+def commandLineWrapper():
+    """
+    Wrapper to only be used to make wombatProcessObs run from the command line using
+    a list of arguments. Any external program should call processObs directly
+    
+
+    Inputs:
+        None to the function itself, but will pull the sys.argv. The possible arguments
+        are the relevant time range, the desired instruments, and optionally the input
+        folder. The outputFolder, outFile, and downsize option are not accessible via
+        the command line at this point.
         
+        Required:
+            starting time - YYYY-MM-DDTHH:MM recommended, but anything supported by
+                            parse_time from sunpy will work.
+                            *** must be first argument after wombatProcessObs.py ***
+
+            ending time -   YYYY-MM-DDTHH:MM recommended, but anything supported by
+                            parse_time from sunpy will work.
+                            *** must be second argument after wombatProcessObs.py ***
+            
+            inst tags -     instrument tags to search for from the following list
+                            can be multiple tags, not just a single
+                            *** must appear directly after ending time ***
+        Optional:
+            inFolder -      top directory where the files will pulled from their
+                            appropriate subfolders
+                            defaults to pullFolder/
+    
+        
+        Available Instrument Tags:
+            AIAnum  = SDO AIA where num represents a wavelength from [94, 131, 171*, 
+                      193*, 211, 304*, 335, 1600, 1700] with * most common
+            C2      = LASCO C2
+            C3      = LASCO C3
+            COR1    = STEREO COR1
+            COR2    = STEREO COR2    
+            EUVInum = STEREO EUVI where num is a wavelength from [171, 195, 284, 304]
+            HI1     = STEREO HI1
+            HI2     = STEREO H2
+            SoloHI  = All quadrants from Solar Orbiter HI
+            SoloHI1 = Quadrant 1 from Solar Orbiter HI
+            SoloHI2 = Quadrant 2 from Solar Orbiter HI
+            SoloHI3 = Quadrant 3 from Solar Orbiter HI
+            SoloHI4 = Quadrant 4 from Solar Orbiter HI
+            WISPR   = Both inner and outer from PSP WISPR
+            WISPRI  = Inner only from PSP WISPR
+            WISRPO  = Outer only from PSP WISPR
+            * all STEREO values will both pull A and B (as available) if written as 
+            above but one can add the A/B tag on the end (e.g. COR2A) to select a
+            single STEREO
+    
+        Actions:
+            Calls processObs
+    
+        
+    """
+    
+    #|---- All the instrument tags ----|
+    tags = ['AIA94', 'AIA131', 'AIA171','AIA193','AIA211','AIA304','AIA335','AIA1600','AIA1700', 'C2', 'C3', 'COR1', 'COR2', 'COR1A', 'COR2A', 'COR1B', 'COR2B', 'EUVI171', 'EUVI195', 'EUVI284', 'EUVI304', 'EUVI171A', 'EUVI195A', 'EUVI284A', 'EUVI304A', 'EUVI171B', 'EUVI195B', 'EUVI284B', 'EUVI304B', 'HI1', 'HI2', 'HI1A', 'HI2A', 'HI1B', 'HI2B','SOLOHI', 'SOLOHI1', 'SOLOHI2', 'SOLOHI3', 'SOLOHI4', 'WISPR', 'WISPRI', 'WISPRO']
+    
+    #|---- Pull the command line args ----|
+    vals = sys.argv[1:]
+    
+    #|---- Pull times and check format ----|
+    try:
+        temp = parse_time(vals[0])
+    except:
+        print('Error in start time format')
+    try:
+        temp = parse_time(vals[1])
+    except:
+        print('Error in end time format')
+    times = [vals[0], vals[1]]
+    
+    vals = vals[2:]
+    
+    #|---- Check rest for inst/folder ----|
+    insts = []
+    inFolder = 'pullFolder/'
+    for val in vals:
+        if val.upper() not in tags:
+            if os.path.isdir(val):
+                inFolder = val
+            else:
+                sys.exit(val + 'is not inst tag or exisiting intput folder. Exiting... ')
+        else:
+            insts.append(val.upper().replace('SOLO', 'Solo'))
+     
+    if len(insts) < 1:
+        sys.exit('No instrument tag provided')
+        
+    processObs(times, insts, inFolder=inFolder)    
+           
 
 if __name__ == '__main__':
-    startT = '2023/09/24T16:00'
-    endT   = '2023/09/24T20:00'
-    
-    times = [startT, endT]
-    sats  = [ 'COR2']
-    processObs(times, sats)
+    commandLineWrapper()
