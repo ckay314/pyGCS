@@ -4,7 +4,6 @@ from sunpy.time import parse_time
 import os
 import glob
 import spiceypy as spice
-from spiceTest import setupPSPkernels
 import math
 from sunpy.coordinates import sun
 
@@ -90,13 +89,6 @@ def get_sunspyce_cmat(date, spacecraft, system=None, instrument=None, tolerance=
         sc_base = 'SOLO_SRF'
         
     time = parse_time(date).utc
-    
-    # load sunspice
-    #load_sunspyce(sc)    
-    # load sunspice att
-    #load_sunspyce_att(sc, time)
-    
-    setupPSPkernels()
     
     # Determine which coord system is specified
     # assuming single value for now 
@@ -230,9 +222,6 @@ def get_sunspyce_coord(date, spacecraft, system=None, instrument=None, target=No
     
     # Convert time to utc
     time = parse_time(date).utc
-    
-    # Load the spicey bois - might want to check if done already but ok with slower for now
-    setupPSPkernels()
     
     # Convert date/time to eph time and then to sc clock time
     et = spice.str2et(date)
@@ -388,8 +377,6 @@ def get_sunspyce_p0_angle(date, spacecraft, doDegrees=False):
     else:
         sys.exit(spacecraft.lower() + ' not in scDict for sunspyce. Pick from sta, stb, solo, psp, earth.')
     
-    # Load the spicey bois (if not already)
-    setupPSPkernels()
     
     # get the orientation of the sun axis in J2000
     et = spice.str2et(date)
@@ -428,9 +415,6 @@ def get_sunspyce_carr_rot(date, spacecraft=None):
     
     # Convert time to utc
     time = parse_time(date).utc
-
-    # Load the spicey bois (if not already)
-    setupPSPkernels()
     
     if type(spacecraft) != type(None): 
         if spacecraft.lower() in scDict:
@@ -457,155 +441,63 @@ def get_sunspyce_carr_rot(date, spacecraft=None):
     
     return carr_rot
     
+def load_common_kernels(pathIn):
+    # Load the kernels that most satellites use
+    kerns = ['de421.bsp', 'naif0012.tls', 'heliospheric.tf', 'pck00011_n0066.tpc']    
     
-
-
-
-
-
-# Old stuff to trash?
-def load_sunspyce(sc):
-    # assume things are available for now
+    # Get the loaded kernels to check against so
+    # we can avoid reloading
+    num_kernels = spice.ktotal('ALL')
+    loadKerns = []
+    for i in range(num_kernels):
+        filename, kind, source, handle,  = spice.kdata(i, 'ALL')
+        loadKerns.append(filename)
+    loadKerns = np.array(loadKerns)
     
-    # load sunspice gen seems to run and return quickly without doing anything here  
-    # add sunspice seems make sure if can find the right function file which we dont care about
-    
-    if sc == '-234':
-        sys.exit('Have not ported STA portion in load sunspyce')
-    elif sc == '-235':
-        sys.exit('Have not ported STB portion in load sunspyce')
-    elif sc == '-184':
-        sys.exit('Have not ported SolO portion in load sunspyce')
-    elif sc == '-96':
-        load_sunspyce_psp()
-    else:
-        sys.exit('Unrecognized sc key in load_sunspyce')
-        
-def load_sunspyce_psp():
-    global psp_spice, psp_spice_gen, psp_spice_sclk, psp_spice_orbit
-    orbit = pspOrbit
-    n_kernels = len(orbit)
-    psp_spice = spiceDir['psp']
-    psp_spice_gen = psp_spice + '/gen'
-    psp_spice_sclk = psp_spice + '/operations_sclk_kernel'
-    
-    aFile = psp_spice+'/frame_files.dat'
-    if os.path.isfile(aFile):
-        frames = np.genfromtxt(aFile, dtype=str)
-
-    # Get the spacecraft clock file
-    allFiles = os.listdir(psp_spice_sclk)
-    keepers = []
-    for aFile in allFiles:
-        if 'spp_sclk' in aFile:
-            keepers.append(aFile)
-    slck = psp_spice_sclk+'/'+np.sort(keepers)[-1]
-    spice.furnsh(slck) # well that is an equiv at least
-    
-    # throw in the leap second file - CK add
-    # IDL probably does elsewhere?
-    lsk = psp_spice + '/naif0012.tls'
-    if os.path.isfile(lsk):
-        spice.furnsh(lsk)
-    
-    
-    # Determine the default predictive orbit file
-    psp_spice_orbit = psp_spice + '/orbit'
-    def_orbit = psp_spice_orbit + '/spp_nom_20180812_20250831_v034_RO1_TCM1.bsp'
-    
-    ephFile = psp_spice + '/ephemerides.dat'
-    if os.path.isfile(ephFile):
-        ephData = np.genfromtxt(ephFile, dtype=str)
-        testFile = psp_spice_orbit + '/' + ephData
-        if os.path.isfile(testFile):
-            def_orbit = testFile
+    # Load em up
+    for aKern in kerns:
+        fullName = pathIn + aKern
+        if fullName not in loadKerns:
+            spice.furnsh(fullName)
             
-    # Determine the predictive orbit file to use -> assume we are not passed an 
-    # orbit file for now
-    orbit = def_orbit
+def load_psp_kernels(pathIn):
+    # Get the loaded kernels to check against so
+    # we can avoid reloading
+    num_kernels = spice.ktotal('ALL')
+    loadKerns = []
+    for i in range(num_kernels):
+        filename, kind, source, handle,  = spice.kdata(i, 'ALL')
+        loadKerns.append(filename)
+    loadKerns = np.array(loadKerns)
     
-    # Load the predictive orbit file
-    if not os.path.isfile(orbit):
-        sys.exit('Cannot find orbit file ' + orbit)
-    else:
-        spice.furnsh(orbit)
+    # All the psp kernel folders
+    pspFolds = ['attitude_long_term_predict', 'attitude_short_term_predict', 'gen', 'operations_sclk_kernel', 'orbit']
+    
+    # Search through and load anyone in these folders
+    for aFold in pspFolds:
+        files = os.listdir(pathIn+aFold)
+        for aF in files:
+            fullName = pathIn + aFold +'/' + aF
+            if fullName not in loadKerns:
+                spice.furnsh(fullName)
         
-    # Load any short term predictive orbit files
-    predict_list = psp_spice + '/ephemeris_predict.dat'
-    if os.path.isfile(predict_list):
-        predict_path = psp_spice + '/ephemeris_predict'
-        predData = np.genfromtxt(predict_list, dtype=str)
-        # Assuming predData is single line
-        predFile = predict_path + '/' + predData
-        if os.path.isfile(predFile):
-            spice.furnsh, predFile
-            ephem_predict = [predFile]
-        else:
-            print ('Predict file ' + predFile + ' not found')
-            
-    # Load any recon orbit files
-    recon_ephem = []
-    recon_list = psp_spice + '/reconstructed_ephemeris.dat'
-    if os.path.isfile(recon_list):
-        recon_path = psp_spice + '/reconstructed_ephemeris'
-        reconData = np.genfromtxt(recon_list, dtype=str)
-        for i in range(len(reconData)):
-            reconFile = recon_path + '/' + reconData[i]
-            if os.path.isfile(reconFile):
-                spice.furnsh, reconFile
-                recon_ephem.append(reconFile)
-            else:
-                print('Recon file ' + reconFile + ' not found')
-                
-    # Load any long term pred attitude history files
-    att_pred = []
-    att_pred_list = psp_spice + '/attitude_long_term_predict.dat'
-    if os.path.isfile(att_pred_list):
-        att_path = psp_spice + '/attitude_long_term_predict'
-        attData = np.genfromtxt(att_pred_list, dtype=str)
-        for i in range(len(attData)):
-            attFile = att_path + '/' + attData[i]
-            if os.path.isfile(attFile):
-                spice.furnsh, attFile
-                att_pred.append(attFile)
-                
-    # Also load any short term att files
-    att_pred_list = psp_spice + '/attitude_short_term_predict.dat'
-    if os.path.isfile(att_pred_list):
-        att_path = psp_spice + '/attitude_short_term_predict'
-        attData = np.genfromtxt(att_pred_list, dtype=str)
-        for i in range(len(attData)):
-            attFile = att_path + '/' + attData[i]
-            if os.path.isfile(attFile):
-                spice.furnsh, attFile
-                att_pred.append(attFile)
-
-def load_sunspyce_att(sc, date):
-    if sc == '-234':
-        sys.exit('Have not ported STA portion in load sunspyce')
-    elif sc == '-235':
-        sys.exit('Have not ported STB portion in load sunspyce')
-    elif sc == '-184':
-        sys.exit('Have not ported SolO portion in load sunspyce')
-    elif sc == '-96':
-        load_sunspyce_psp()
-        load_sunspyce_att_psp(date)
-    else:
-        sys.exit('Unrecognized sc key in load_sunspyce')
+def load_solo_kernels(pathIn):
+    # Get the loaded kernels to check against so
+    # we can avoid reloading
+    num_kernels = spice.ktotal('ALL')
+    loadKerns = []
+    for i in range(num_kernels):
+        filename, kind, source, handle,  = spice.kdata(i, 'ALL')
+        loadKerns.append(filename)
+    loadKerns = np.array(loadKerns)
     
-        
-def load_sunspyce_att_psp(date):
-    dt = date.datetime
-    doy = dt.timetuple().tm_yday
-    sdate = str(dt.year)+'_'+str(doy).zfill(3)
-    # Assuming single val not array for now
-    # assuming no att date
+    # All the solo kernel folders
+    soloFolds = ['att', 'gen', 'operations_sclk_kernel', 'orbit', 'sclk']
     
-    psp_spice = spiceDir['psp']
-    attDir = psp_spice + '/attitude_history'
-    
-    # IDL isn't finding any files here so skipping the rest of this
-    
-    
-        
-    
+    # Search through and load anyone in these folders
+    for aFold in soloFolds:
+        files = os.listdir(pathIn+aFold)
+        for aF in files:
+            fullName = pathIn + aFold +'/' + aF
+            if fullName not in loadKerns:
+                spice.furnsh(fullName)    

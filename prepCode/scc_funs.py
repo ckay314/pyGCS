@@ -6,11 +6,9 @@ from astropy import wcs
 import sys, os
 from scipy.io import readsav
 from sunspyce import get_sunspyce_roll, get_sunspyce_hpc_point
-from spiceTest import setupPSPkernels, loadSomeSTEREO
 
 # Hardcoded secchi backgrounds here  for now
 global secchi_bkg, gtFile
-#secchi_bkg = '/Volumes/SRP/vourla1/sswdb/stereo/secchi/backgrounds/'
 secchi_bkg = '/Users/kaycd1/STEREObackgrounds/'
 gtFile = '/Users/kaycd1/ssw/stereo/secchi/data/gt/secchi_gtdbase.geny'
 global mjd_epoch, idl_base_date
@@ -1579,10 +1577,11 @@ def euvi_point(hdr):
             if np.abs(hdr['crota'] - scrota) > 0.1: roll_bad = 1
             
     # Assume we are doing the roll 
-    setupPSPkernels()
     yr0 = datetime.datetime(int(hdr['date-obs'][:4]), 1, 1, 0,0,0)
     sDOY = str(int((t-yr0).total_seconds()/3600./24. + 1)).zfill(3)
-    loadSomeSTEREO(hdr['date-obs'][:4]+'_'+sDOY)
+    # Haven't found a test case that hits this post kernal reloc but keeping it
+    # here in case need to re incorporate later
+    #loadSomeSTEREO(hdr['date-obs'][:4]+'_'+sDOY)
 
     rollrada = get_sunspyce_roll(hdr['date-obs'],'st'+obs_s,system='GEI')[0] / (180 / np.pi)
     # convert roll into PC matrix

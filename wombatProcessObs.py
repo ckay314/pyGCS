@@ -83,7 +83,6 @@ import astropy.units as u
 from astropy.time import TimeDelta
 from sunpy.time import parse_time
 
-
 sys.path.append('prepCode/') 
 from secchi_prep import secchi_prep
 from wispr_prep import wispr_prep
@@ -91,6 +90,7 @@ from lasco_prep import c2_prep, c3_prep
 from solohi_prep import solohi_fits2grid
 from aia_prep import aia_prep
 from wombatPullObs import setupFolderStructure
+from sunspyce import load_common_kernels, load_psp_kernels, load_solo_kernels
 
 
 # |-------------------------------|
@@ -760,31 +760,32 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
         else:
             for j in ABtoDo[i]:
                 myCOR = 'COR1'+AB[j]
+                
                 # Need to check on making triples, missing files will cause isses
-                
-                all00s = []
+                fileYMDs = []
                 for aF in goodFiles[i][j]:
-                    if '000_s4c' in aF:
-                        justFile = aF.replace(inFolder+myCOR+'/'+myCOR + '_','')
-                        jF2 = justFile.replace('00_s4c1'+AB[j]+'.fts','')
-                        all00s.append(jF2)
-                all00s = np.array(all00s)
-                trips = [[] for i in range(len(all00s))]
-                for k in range(len(goodFiles[i][j])):
-                    justFile = goodFiles[i][j][k].replace(inFolder+myCOR+'/'+myCOR + '_','')
-                    jF2 = justFile.replace('s4c1'+AB[j]+'.fts','')[:-3]
-                    myTrip = np.where(all00s == jF2)[0]
-                    if len(myTrip) > 0:
-                        trips[myTrip[0]].append(goodFiles[i][j][k])
+                    pref = inFolder+'COR1'+AB[j]+'/COR1'+AB[j]+'_'
+                    fileYMDs.append(aF.replace(pref, '')[:15][:-2]) # this is yyyymmdd_hhmm
+                fileYMDs = np.array(fileYMDs)
                 
+                haveDone = []
                 goodTrips = []
-                for trip in trips:
-                    if (len(trip) == 3):
-                        goodTrips.append(trip)
+                for kk in range(len(fileYMDs)):
+                    if kk not in haveDone:
+                        # trips should only differ in seconds
+                        noSecs = fileYMDs[kk]
+                        matches = np.where(fileYMDs == noSecs)[0]
+                        if len(matches) == 3:
+                            myTrip = []
+                            for iii in range(3):
+                                haveDone.append(matches[iii])
+                                myTrip.append(goodFiles[i][j][matches[iii]])
+                            goodTrips.append(myTrip)
+
                 
                 if len(goodTrips) > 0:
                     ims, hdrs = [], []
-                    print ('|---- Processing '+ str(len(trips)) +' triplets for COR1'+AB[j]+' ----|')
+                    print ('|---- Processing '+ str(len(goodTrips)) +' triplets for COR1'+AB[j]+' ----|')
                     outLines.append(fronts[j]+inst+'\n')
                     for k in range(len(goodTrips)):
                         print ('      on triplet ' +str(1+k))
@@ -797,7 +798,7 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
                         fullName = nowFold + '/' + fitsName   
                         fits.writeto(fullName, ims[k], hdrs[k], overwrite=True)
                         outLines.append(fullName+'\n')
-                                                                          
+    
     return outLines
     
 
@@ -1197,7 +1198,23 @@ def commandLineWrapper():
      
     if len(insts) < 1:
         sys.exit('No instrument tag provided')
-        
+    
+    #|---- Set up spice kernels as needed ----|
+    kernelSpot = os.getcwd() + '/spiceKernels/'
+    # Kernels everyone likely needs
+    load_common_kernels(kernelSpot)
+    # Check for psp or solo
+    loadPSP, loadSOLO = False, False
+    for inst in insts:
+        if inst.upper() in ['WISPR', 'WISPRI', 'WISPRO']:
+            loadPSP = True
+        elif inst.upper() in ['SOLOHI', 'SOLOHI1', 'SOLOHI2', 'SOLOHI3', 'SOLOHI4',]:
+            loadSOLO = True
+    if loadPSP:
+        load_psp_kernels(kernelSpot+'psp/')
+    if loadSOLO:
+        load_solo_kernels(kernelSpot+'solo/')
+    
     processObs(times, insts, inFolder=inFolder)    
            
 
