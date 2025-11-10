@@ -9,7 +9,7 @@ from sunspyce import get_sunspyce_roll, get_sunspyce_hpc_point
 
 # Hardcoded secchi backgrounds here  for now
 global secchi_bkg, gtFile
-secchi_bkg = '/Users/kaycd1/STEREObackgrounds/'
+#secchi_bkg = '/Users/kaycd1/STEREObackgrounds/'
 #gtFile = '/Users/kaycd1/ssw/stereo/secchi/data/gt/secchi_gtdbase.geny'
 global mjd_epoch, idl_base_date
 mjd_epoch = datetime.datetime(1858, 11, 17, 0, 0, 0)
@@ -911,7 +911,7 @@ def scc_sebip(img, hdr):
         flag = True
     return im.astype(int), hdr, flag
 
-def scc_getbkgimg(hdr, doRot=False):
+def scc_getbkgimg(hdr, secchi_bkg ='STEREObackgrounds/' , doRot=False):
     # Assume no interp for now
     
     # port of get_delim, untested on windows

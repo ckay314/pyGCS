@@ -500,7 +500,7 @@ def findFiles(timesIn, insts, nMax=20, obsFold='wbFits/', diffMode='RD', diffEUV
                 else:
                     toGrab.append(obsFold+'STEREO/'+inst+'A/')
                     names.append(inst+'A/')
-                    if str(times[0]) < '2014-10-01T00:00:00.000':
+                    if str(timesIn[0]) < '2014-10-01T00:00:00.000':
                         toGrab.append(obsFold+'STEREO/'+inst+'B/')
                         names.append(inst+'B/')
             elif 'EUVI' in inst:
@@ -512,7 +512,7 @@ def findFiles(timesIn, insts, nMax=20, obsFold='wbFits/', diffMode='RD', diffEUV
                 else:
                     toGrab.append(obsFold+'STEREO/EUVIA/'+inst.replace('EUVI','')+'/')
                     names.append(inst+'A/')
-                    if str(times[0]) < '2014-10-01T00:00:00.000':
+                    if str(timesIn[0]) < '2014-10-01T00:00:00.000':
                         toGrab.append(obsFold+'STEREO/EUVIB/'+inst.replace('EUVI','')+'/')
                         names.append(inst+'B/')
     

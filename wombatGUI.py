@@ -979,7 +979,6 @@ class FigWindow(QWidget):
                     # Fill up top row
                     if myNum < nRow:
                         myx = pWinWid + myWid * myNum
-                        print ('  ', myNum, myx, 10)
                         self.setGeometry(myx, 10, 350, 450)
                 
                     # Add remaining to bottom
@@ -1650,6 +1649,14 @@ def makeNiceMMs(obsIn, satStuffs):
     else:
         allObs[np.isnan(allObs)] = -9999
     
+    #|---- Clean out Infs ----| 
+    if not diffImg:
+        allObs[np.isinf(np.abs(allObs))] = 0
+        imNonNaN[np.isinf(np.abs(imNonNaN))] = 0
+    else:
+        allObs[np.isinf(np.abs(allObs))] = -9999
+        imNonNaN[np.isinf(np.abs(imNonNaN))] = -9999
+    
     #|-------------------------------------| 
     #|--------- Process the data ----------|
     #|-------------------------------------|    
@@ -1666,7 +1673,7 @@ def makeNiceMMs(obsIn, satStuffs):
     # Calc range and scale to 0 - 255
     rng = linMax- linMin
     linIm = (allObs - linMin) * 255 / rng
-    
+
     #|---- Process log imgs ----|   
     # Normalize to keep things in nice ranges
     tempIm = allObs / medval
