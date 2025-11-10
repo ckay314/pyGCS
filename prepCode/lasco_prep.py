@@ -8,23 +8,6 @@ from astropy.time import Time
 
 from sunpy.time import parse_time
 
-efacDir = '/Users/kaycd1/ssw/soho/lasco/idl/expfac/data/'
-c2vigFile = '/Users/kaycd1/ssw/soho/lasco/idl/data/calib/c2vig_final.fts'
-c3previgFile = '/Users/kaycd1/ssw/soho/lasco/idl/data/calib/c3vig_preint_final.fts'
-c3postvigFile = '/Users/kaycd1/ssw/soho/lasco/idl/data/calib/c3vig_postint_final.fts'
-c3maskFile = '/Users/kaycd1/ssw/soho/lasco/idl/data/calib/c3_cl_mask_lvl1.fts' 
-c3rampFile = '/Users/kaycd1/ssw/soho/lasco/idl/data/calib/C3ramp.fts'
-c3bkgFile  = '/Users/kaycd1/ssw/soho/lasco/idl/data/calib/3m_clcl_all.fts'
-
-#from scc_funs import scc_make_array, scc_zelensky_array, rebinIDL
-#from cor_prep import cor_prep
-#from hi_prep import hi_prep
-#from sunpy.coordinates import get_horizons_coord
-#from sunspyce import get_sunspyce_hpc_point, get_sunspyce_roll, get_sunspyce_coord, get_sunspyce_lonlat, get_sunspyce_p0_angle, get_sunspyce_carr_rot
-#from sunpy.coordinates import spice
-#import scipy.io
-#from wcs_funs import fitshead2wcs, wcs_get_coord, idlsav2wcs
-
 def get_solar_ephem(yymmdd, isSOHO=False):
     dte = parse_time(yymmdd).utc
     j2000 = parse_time('2000/01/01').utc
@@ -39,9 +22,8 @@ def get_solar_ephem(yymmdd, isSOHO=False):
     radius = 0.2666 / dist
     
     return radius, dist, lon
-
     
-def get_exp_factor(hdr):
+def get_exp_factor(hdr, efacDir):
     tel = hdr['detector'].lower()
     mjd = hdr['mid_date']
     jd = mjd + 2400000.5
@@ -171,13 +153,14 @@ def c3_calfactor(hdr, nosum=False):
                      
     return cal_factor
     
-def c2_calibrate(imIn, hdr, noCalFac=False):
+def c2_calibrate(imIn, hdr, prepDir, noCalFac=False):
     im = np.copy(imIn)
     if hdr['detector'] != 'C2':
         sys.exit('Error in c2_calibrate, passed non C2 files')
     
     # Get the exp_factor
-    expfac, bias = get_exp_factor(hdr)
+    efacDir = prepDir+'expfac_data/'
+    expfac, bias = get_exp_factor(hdr, efacDir)
     hdr['EXPTIME'] = hdr['EXPTIME'] * expfac
     hdr['offset']  = bias
     if not noCalFac:
@@ -186,6 +169,7 @@ def c2_calibrate(imIn, hdr, noCalFac=False):
         calfac = 1
 
     # open the vignetting file
+    c2vigFile = prepDir + 'c2vig_final.fts'
     with fits.open(c2vigFile) as hdulist:
         vig  = hdulist[0].data
         hdrV = hdulist[0].header
@@ -214,14 +198,14 @@ def c2_calibrate(imIn, hdr, noCalFac=False):
     
     return im, hdr
     
-def c3_calibrate(imIn, hdr, noCalFac=False, noMask=False):
+def c3_calibrate(imIn, hdr, prepDir, noCalFac=False, noMask=False):
     im = np.copy(imIn)
     if hdr['detector'] != 'C3':
         sys.exit('Error in c3_calibrate, passed non C3 files')
         
     # Get the exp_factor
-    expfac, bias = get_exp_factor(hdr)
-    expfac, bias = get_exp_factor(hdr)
+    efacDir = prepDir+'expfac_data/'
+    expfac, bias = get_exp_factor(hdr, efacDir)
     hdr['EXPTIME'] = hdr['EXPTIME'] * expfac
     hdr['offset']  = bias
     
@@ -233,24 +217,27 @@ def c3_calibrate(imIn, hdr, noCalFac=False, noMask=False):
     # Vignetting    
     mjd = hdr['mid_date']
     if mjd < 51000:
-        vigFile = c3previgFile
+        vigFile = prepDir + 'c3vig_preint_final.fts' 
     else:
-        vigFile = c3postvigFile
+        vigFile = prepDir + 'c3vig_postint_final.fts'
     with fits.open(vigFile) as hdulist:
         vig  = hdulist[0].data
         hdrV = hdulist[0].header
     
     # Mask file    
+    c3maskFile = prepDir + 'c3_cl_mask_lvl1.fts'
     with fits.open(c3maskFile) as hdulist:
         mask  = hdulist[0].data
         hdrM = hdulist[0].header
     
     # Ramp file    
+    c3rampFile = prepDir + 'C3ramp.fts'
     with fits.open(c3rampFile) as hdulist:
         ramp = hdulist[0].data
         hdrR = hdulist[0].header
      
     # Bkg file for fuzziness?    
+    c3bkgFile = prepDir + '3m_clcl_all.fts'
     with fits.open(c3bkgFile) as hdulist:
         bkg = hdulist[0].data
         hdrb = hdulist[0].header
@@ -304,13 +291,13 @@ def c3_calibrate(imIn, hdr, noCalFac=False, noMask=False):
         
     
     
-def c2_prep(filesIn):
+def c2_prep(filesIn, prepDir):
     ims, hdrs = [], []
     for aFile in filesIn:
         with fits.open(aFile) as hdulist:
             im  = hdulist[0].data
             hdr = hdulist[0].header
-        im, hdr = c2_calibrate(im, hdr)
+        im, hdr = c2_calibrate(im, hdr, prepDir)
         rad, dist, lon = get_solar_ephem(hdr['date-obs'], isSOHO=True)
         # Add in the solar rad in arcsec
         hdr['rsun'] = rad * 3600
@@ -319,13 +306,13 @@ def c2_prep(filesIn):
     
     return np.array(ims), hdrs
     
-def c3_prep(filesIn):
+def c3_prep(filesIn, prepDir):
      ims, hdrs = [], []
      for aFile in filesIn:
          with fits.open(aFile) as hdulist:
              im  = hdulist[0].data
              hdr = hdulist[0].header
-         im, hdr = c3_calibrate(im, hdr)
+         im, hdr = c3_calibrate(im, hdr, prepDir)
          rad, dist, lon = get_solar_ephem(hdr['date-obs'], isSOHO=True)
          # Add in the solar rad in arcsec
          hdr['rsun'] = rad * 3600

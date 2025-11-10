@@ -11,18 +11,13 @@ from scipy.interpolate import griddata
 c = np.pi / 180.
 cunit2rad = {'arcmin': c / 60.,   'arcsec': c / 3600.,  'mas': c / 3600.e3,  'rad':  1.}
 
-# python doesn't know about IDL specific env_vars bc runs in diff env
-# so hardcode this for now (NEED TO FIX EVENTUALLY!!!!)
-global calpath
-calpath =  '/Users/kaycd1/ssw/stereo/secchi/calibration/'
-
-def get_calimg(hdr, calimg_filename=None, outSize=None):
+def get_calimg(hdr, calPath, calimg_filename=None, outSize=None):
     # Assuming proper header passed. Starting at 131
     new_flag = True
     HIsum_flag = False
     
     # Create calibration image filename
-    path = calpath
+    #path = calpath
     
     det = hdr['DETECTOR']
     if det == 'COR1':
@@ -68,7 +63,7 @@ def get_calimg(hdr, calimg_filename=None, outSize=None):
         print ('DETECTOR could not be found')
         sys.exit()
         
-    filename = path+cal_version+tail
+    filename = calPath+cal_version+tail
     
     # Check if we were passed a file name
     if calimg_filename:
@@ -283,7 +278,7 @@ def warp_tri(xr,yr,xi,yi,img):
     
     return imgOut
         
-def cor_calibrate(img, hdr, outSize=None, sebip_off=False, exptime_off=False, bias_off=False, calimg_off=False, calfac_off=False):
+def cor_calibrate(img, hdr,prepDir, outSize=None, sebip_off=False, exptime_off=False, bias_off=False, calimg_off=False, calfac_off=False):
     # Flag that we done this in the fits header history
     newStuff = 'Applied python port of cor_calibrate.pro CK 2025'
     hdr['history'] = newStuff
@@ -316,7 +311,7 @@ def cor_calibrate(img, hdr, outSize=None, sebip_off=False, exptime_off=False, bi
     if calimg_off:
         calimg = 1.0
     else:
-        calimg, hdr = get_calimg(hdr, outSize=outSize)
+        calimg, hdr = get_calimg(hdr, prepDir+'calimg/', outSize=outSize)
         hdr['history'] = 'Applied vignetting '
         
     if calfac_off:
@@ -331,7 +326,7 @@ def cor_calibrate(img, hdr, outSize=None, sebip_off=False, exptime_off=False, bi
         
     return img, hdr
 
-def cor1_calibrate(img, hdr, outSize=None, sebip_off=False, exptime_off=False, bias_off=False, calimg_off=False, calfac_off=False, bkgimg_off=False):  
+def cor1_calibrate(img, hdr, prepDir, outSize=None, sebip_off=False, exptime_off=False, bias_off=False, calimg_off=False, calfac_off=False, bkgimg_off=False):  
     # Flag that we done this in the fits header history
     newStuff = 'Applied python port of cor_calibrate.pro CK 2025'
     hdr['history'] = newStuff
@@ -366,7 +361,7 @@ def cor1_calibrate(img, hdr, outSize=None, sebip_off=False, exptime_off=False, b
     if calimg_off:
         calimg = None
     else:
-        calimg, hdr = get_calimg(hdr)
+        calimg, hdr = get_calimg(hdr, prepDir+'calimg/')
         hdr['history'] = 'Applied vignetting '
 
     # Background subtraction (to do)    
@@ -452,7 +447,7 @@ def cor2_warp(im,hdr):
     
     return im, hdr
 
-def cor_prep(im, hdr, outSize=None, calibrate_off=False, warp_off=False):
+def cor_prep(im, hdr, prepDir, outSize=None, calibrate_off=False, warp_off=False):
     # Assuming passed a nice header 
     
     # Skipping to 174
@@ -463,9 +458,9 @@ def cor_prep(im, hdr, outSize=None, calibrate_off=False, warp_off=False):
     # Calibration
     if not calibrate_off:
         if hdr['detector'] == 'COR1':
-            im, hdr = cor1_calibrate(im, hdr, outSize)
+            im, hdr = cor1_calibrate(im, hdr, prepDir, outSize=outSize)
         else:
-            im, hdr = cor_calibrate(im, hdr, outSize)
+            im, hdr = cor_calibrate(im, hdr, prepDir, outSize=outSize)
     # Not hitting Missing block mask (193-199)
     missing = 0
     

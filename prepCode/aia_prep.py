@@ -48,6 +48,3 @@ def aia_prep(filesIn, downSize=1024):
         
         maps_out.append(aia_map_normed)
     return maps_out 
-    
-#fname = ['/Users/kaycd1/wombat/obsFiles/AIA/aia_lev1_304a_2023_03_04t14_00_05_15z_image_lev1.fits']
-#aiaMap = aia_prep(fname)

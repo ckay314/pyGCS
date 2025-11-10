@@ -303,7 +303,7 @@ def processAIA(times, wavs, inFolder='pullFolder/SDO/AIA/', outFolder='wbFits/SD
 # |------------------------------------------------------------|
 # |--------------- Process LASCO Observations -----------------|
 # |------------------------------------------------------------|
-def processLASCO(times, insts, inFolder='pullFolder/SOHO/LASCO/', outFolder='wbFits/SOHO/LASCO/', downSize=1024):
+def processLASCO(times, insts, inFolder='pullFolder/SOHO/LASCO/', outFolder='wbFits/SOHO/LASCO/', downSize=1024, prepDir='prepFiles/soho/lasco/'):
     """
     Function to process level 0.5 LASCO observations using c2_prep/c3_prep
     
@@ -323,6 +323,9 @@ def processLASCO(times, insts, inFolder='pullFolder/SOHO/LASCO/', outFolder='wbF
                
         outFolder: top folder for processed results, will be save in outFolder/SOHO/inst/
                    defaults to wbFits/SOHO/LASCO/
+        
+        prepDir:   folder where the prep files for LASCO are stored
+                   defaults ot prepFiles/soho/lasco
     
         downSize: maximum resolution to save the processed fits files 
                   *** not implemented in c2/3_prep yet so key is currently ignored ***
@@ -400,9 +403,9 @@ def processLASCO(times, insts, inFolder='pullFolder/SOHO/LASCO/', outFolder='wbF
             goodFiles[i] = np.sort(np.array(goodFiles[i]))
             outLines.append('LASCO_' + str(insts[i]) + '\n')
             if insts[i] == 'C2':
-                ims, hdrs = c2_prep(goodFiles[i])  
+                ims, hdrs = c2_prep(goodFiles[i], prepDir)  
             if insts[i] == 'C3':    
-                ims, hdrs = c3_prep(goodFiles[i])      
+                ims, hdrs = c3_prep(goodFiles[i], prepDir)      
             for j in range(len(ims)):
                 ymd = hdrs[j]['DATE-OBS'].replace('/','')+'T'+hdrs[j]['TIME-OBS'].replace(':','')[:6]
                 fitsName = 'wbpro_lasco'+insts[i]+'_'+ymd+'.fits'
@@ -607,7 +610,7 @@ def processSoloHI(times, insts, inFolder='pullFolder/SolO/SoloHI/', outFolder='w
 # |------------------------------------------------------------|
 # |-------------- Process STEREO Observations -----------------|
 # |------------------------------------------------------------|
-def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits/STEREO/', downSize=1024):
+def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits/STEREO/', downSize=1024, prepDir='prepFiles/stereo/'):
     """
     Function to process STEREO observations using secchi_prep
     
@@ -631,6 +634,9 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
                    defaults to wbFits/SOHO/LASCO/
     
         downSize: maximum resolution to save the processed fits files 
+    
+        gtFileIn: save file (ecchi_gtdbase.geny) needed for EUVI processing in scc_funs/scc_gt2sunvec
+                  defaults to prepFiles/stereo/secchi_gtdbase.geny
         
     Outputs:
         The processed fits files will be placed in the appropriate folders within outFolder
@@ -744,7 +750,7 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
                 if len(goodFiles[i][j]) > 0:
                     print ('|--- Processing STEREO '+inst+' '+AB[j]+' ---|')
                     outLines.append(fronts[j]+inst.replace('EUVI','EUVI_')+'\n')
-                    ims, hdrs = secchi_prep(goodFiles[i][j], outSize=[downSize, downSize]) 
+                    ims, hdrs = secchi_prep(goodFiles[i][j], outSize=[downSize, downSize], prepDir=prepDir) 
                     for k in range(len(ims)):
                         ymd = hdrs[k]['DATE-OBS'].replace('-','').replace(':','')[:15]  
                         fitsName = fronts2[j]+inst.lower()+'_'+ymd+'.fits' 
@@ -789,7 +795,7 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
                     outLines.append(fronts[j]+inst+'\n')
                     for k in range(len(goodTrips)):
                         print ('      on triplet ' +str(1+k))
-                        aIm, aHdr = secchi_prep(goodTrips[k], polarizeOn=True, silent=True)
+                        aIm, aHdr = secchi_prep(goodTrips[k], polarizeOn=True, silent=True, prepDir=prepDir)
                         ims.append(aIm[0])
                         hdrs.append(aHdr[0])
                         ymd = hdrs[k]['DATE-OBS'].replace('-','').replace(':','')[:15]  
@@ -805,7 +811,7 @@ def processSTEREO(times, insts, inFolder='pullFolder/STEREO/', outFolder='wbFits
 # |------------------------------------------------------------|
 # |--------------- Process WISPR Observations -----------------|
 # |------------------------------------------------------------|
-def processWISPR(times, insts, inFolder='pullFolder/PSP/WISPR/', outFolder='wbFits/PSP/WISPR/', downSize=1024):
+def processWISPR(times, insts, wcalpath='prepFiles/psp/wispr/',  inFolder='pullFolder/PSP/WISPR/', outFolder='wbFits/PSP/WISPR/', downSize=1024):
     """
     Function to process the level 2 WISPR data
     
@@ -820,6 +826,9 @@ def processWISPR(times, insts, inFolder='pullFolder/PSP/WISPR/', outFolder='wbFi
         insts: strings for selected instruments (Mosaic, SoloHI# where # in 1-4)
     
     Optional Inputs:
+        wcalpath: folder where the WISPR calibration files are stored
+                  defaults to prepFiles/psp/wispr/
+    
         inFolder: top folder for unprocessed results, will open from outFolder/#/
                   defaults to pullFolder/PSP/WISPR/
                
@@ -894,7 +903,7 @@ def processWISPR(times, insts, inFolder='pullFolder/PSP/WISPR/', outFolder='wbFi
             print ('|---- Processing WISPR ' + insts[i] + ' ----|')
             # Make an array and sort alphabetically = time sorted      
             goodFiles[i] = np.sort(np.array(goodFiles[i]))
-            ims, hdrs = wispr_prep(goodFiles[i], straylightOff=True)
+            ims, hdrs = wispr_prep(goodFiles[i], wcalpath, straylightOff=True)
             outLines.append('WISPR_'+ insts[i] + '\n')
             for j in range(len(ims)):
                 ymd = hdrs[j]['DATE-OBS'].replace('-','').replace(':','')[:15]  

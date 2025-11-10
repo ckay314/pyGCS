@@ -3,8 +3,6 @@ import os
 import sys
 from astropy.io import fits
 from scc_funs import scc_sebip
-#from scc_funs import secchi_rectify, fill_from_defhdr, rebinIDL, scc_getbkgimg, scc_sebip
-#from wcs_funs import get_Suncent, fitshead2wcs
 import datetime
 from scipy.interpolate import griddata
 from cor_prep import get_calfac, get_calimg
@@ -28,7 +26,7 @@ def euvi_get_normal(hdr):
     return filter_factor
 
 
-def euvi_correction(img, hdr, sebipOff=False, exptimeOff=False, biasOff=False, normalOff=False, dn2pOff=False, calImgOff=False):
+def euvi_correction(img, hdr, prepDir, sebipOff=False, exptimeOff=False, biasOff=False, normalOff=False, dn2pOff=False, calImgOff=False):
     if hdr['detector'] != 'EUVI':
         sys.exit('Passed non EUVI obs to euvi_correcton')
     hdr['history'] = 'Applied port of euvi_correction.pro'
@@ -62,14 +60,14 @@ def euvi_correction(img, hdr, sebipOff=False, exptimeOff=False, biasOff=False, n
         
     calimg = 1.0
     if not calImgOff:
-        calimg, hdr = get_calimg(hdr)
+        calimg, hdr = get_calimg(hdr, prepDir+'calimg/')
   
     # Apply correction
     img = ((img - biasmean)*photons_dn/(exptime*normal))*calimg
         
     return img, hdr
 
-def euvi_prep(im, hdr, pointingOff=True, calibrateOff=False):
+def euvi_prep(im, hdr, prepDir, pointingOff=True, calibrateOff=False):
     if hdr['detector'] != 'EUVI':
         sys.exit('Calibration for EUVI DETECTOR only')
     
@@ -80,7 +78,7 @@ def euvi_prep(im, hdr, pointingOff=True, calibrateOff=False):
     
     # Correction DN
     if not calibrateOff:
-        im, hdr = euvi_correction(im, hdr)
+        im, hdr = euvi_correction(im, hdr, prepDir)
         
     # Skipping missing
     # Not doing dejitter

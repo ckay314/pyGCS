@@ -18,7 +18,7 @@ alogger.setLevel(logging.ERROR)
 np.seterr(divide='ignore')
 
 
-def secchi_prep(filesIn, outSize=None, silent=False, polarizeOn=False):
+def secchi_prep(filesIn, outSize=None, silent=False, polarizeOn=False, prepDir=None):
     # Port of the basic functionality of IDL version
     # For polarized images need to just pass three at a time
     
@@ -93,7 +93,8 @@ def secchi_prep(filesIn, outSize=None, silent=False, polarizeOn=False):
         det = hdr['DETECTOR']
         if det == 'EUVI':
             # Only one of our cases that hits this is EUVI
-            im, hdr = scc_img_trim(im, hdr)
+            gtFile = prepDir + 'secchi_gtdbase.geny'
+            im, hdr = scc_img_trim(im, hdr, gtFile=gtFile)
         # Not hitting trimming (405 - 408)
                 
         # Rescale image to fit output size
@@ -120,19 +121,19 @@ def secchi_prep(filesIn, outSize=None, silent=False, polarizeOn=False):
         det = hdr['DETECTOR']
                 
         if det == 'EUVI':
-            im, hdr = euvi_prep(im, hdr)
+            im, hdr = euvi_prep(im, hdr, prepDir)
         elif det == 'COR1':
-            im, hdr = cor_prep(im, hdr, outSize)        
+            im, hdr = cor_prep(im, hdr, prepDir, outSize)        
             # Do polarization below after looped
             
         elif det == 'COR2':
-            im, hdr = cor_prep(im, hdr, outSize)
+            im, hdr = cor_prep(im, hdr, prepDir, outSize)
              
             # No polarization for now
         elif det == 'HI1':
-            im, hdr = hi_prep(im, hdr)
+            im, hdr = hi_prep(im, hdr, prepDir)
         elif det == 'HI2':
-            im, hdr = hi_prep(im, hdr)
+            im, hdr = hi_prep(im, hdr, prepDir)
             
         # IP summing already done it seems
                 

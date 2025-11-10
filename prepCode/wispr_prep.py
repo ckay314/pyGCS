@@ -29,8 +29,8 @@ spice.install_frame('IAU_SUN')
 
 # python doesn't know about IDL specific env_vars bc runs in diff env
 # so hardcode this for now (NEED TO FIX EVENTUALLY!!!!)
-global wcalpath
-wcalpath = '/Users/kaycd1/ssw/psp/wispr/calibration/'
+#global wcalpath
+#wcalpath = '/Users/kaycd1/ssw/psp/wispr/calibration/'
 
 global dtor 
 dtor = np.pi / 180.
@@ -103,7 +103,7 @@ def wispr_get_calfac(hdr):
         sys.exit('Invalid WISPR header, issue in calfac')
     return calfac
     
-def wispr_get_calimg(hdr):
+def wispr_get_calimg(hdr, wcalpath):
     if hdr['detector'] not in [1, 2]:
         sys.exit('Invalid WISPR header, issue in calimg')
     if hdr['detector'] == 1:
@@ -134,7 +134,7 @@ def wispr_get_calimg(hdr):
     return calimg, calhdr
 
     
-def wispr_correction(im, hdr, calfacOff=False, calimgOff=False, exptimeOff=False, truncOff=False):
+def wispr_correction(im, hdr, wcalpath, calfacOff=False, calimgOff=False, exptimeOff=False, truncOff=False):
     hdr['history'] = 'Applied wispr_correction (Python port)'
     
     calcnt = 0 
@@ -170,7 +170,7 @@ def wispr_correction(im, hdr, calfacOff=False, calimgOff=False, exptimeOff=False
     # cal img
     calimg = 1.
     if not calimgOff:
-       calimg, calhdr = wispr_get_calimg(hdr) 
+       calimg, calhdr = wispr_get_calimg(hdr, wcalpath) 
        calcnt = calcnt+1
        
     im = im / calimg * calfac
@@ -182,7 +182,7 @@ def wispr_correction(im, hdr, calfacOff=False, calimgOff=False, exptimeOff=False
    
     return im, hdr
     
-def get_wispr_pointing(shdr, doSpice=True, doCoords=False):
+def get_wispr_pointing(shdr, wcalpath, doSpice=True, doCoords=False):
     shdr['VERS_CAL'] = '2020915'
     detect = shdr['DETECTOR']
     instr = ['SPP_WISPR_INNER', 'SPP_WISPR_OUTER']
@@ -487,7 +487,7 @@ def wispr_straylight(hdr, im, dn=False):
     im = im - sl
     return hdr, im
 
-def wispr_prep(filesIn, outSize=None, silent=False, biasOff=False, biasOffsetOff=False, lin_correct=False, straylightOff=False, pointingOff=False):
+def wispr_prep(filesIn, wcalpath, outSize=None, silent=False, biasOff=False, biasOffsetOff=False, lin_correct=False, straylightOff=False, pointingOff=False):
     # Port of basic functionality of IDL version
     
     # Want filesIn as a list, even if single
@@ -526,7 +526,7 @@ def wispr_prep(filesIn, outSize=None, silent=False, biasOff=False, biasOffsetOff
         # -----------------------
         #    Begin Calibration
         # -----------------------
-        im, hdr = wispr_correction(im, hdr)
+        im, hdr = wispr_correction(im, hdr, wcalpath)
         
         if (hdr['detector'] == 2) & (not straylightOff):
             hdr, im = wispr_straylight(hdr, im)
@@ -544,7 +544,7 @@ def wispr_prep(filesIn, outSize=None, silent=False, biasOff=False, biasOffsetOff
             
         # Pointing
         if not pointingOff:
-            hdr = get_wispr_pointing(hdr, doCoords=True)
+            hdr = get_wispr_pointing(hdr, wcalpath, doCoords=True)
         
         im[np.where(im < 0)] = 0
         

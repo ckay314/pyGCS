@@ -7,13 +7,6 @@ from scipy.interpolate import griddata
 from scc_funs import scc_sebip, scc_hi_diffuse
 from cor_prep import get_calfac, get_calimg
 
-#from scc_funs import secchi_rectify, fill_from_defhdr, rebinIDL, scc_getbkgimg
-#from wcs_funs import get_Suncent, fitshead2wcs
-
-# hardcode environment variable from IDL
-global sccDataPath
-sccDataPath =  '/Users/kaycd1/ssw/stereo/secchi/data'
-
 def hi_read_pointing(fle):
     with fits.open(fle) as hdulist:
         nxt = len(hdulist) 
@@ -29,10 +22,10 @@ def hi_read_pointing(fle):
         outs = [hdulist[i+1].header for i in ordIdx]
         return outs
 
-def hi_fix_pointing(hdr, hipointfile=None, ravg=None, tvary=False):
+def hi_fix_pointing(hdr, prepDir, hipointfile=None, ravg=None, tvary=False):
     # assume we dont start with the hipointfile
     if hipointfile == None:
-        myDir = sccDataPath + '/hi/'
+        myDir = prepDir + 'hi/'
         
         # asumme we are passed a single header at a time (for now)
         rtmp = 5
@@ -260,7 +253,7 @@ def hi_desmear(im,hdr):
         
     return im, hdr
 
-def hi_correction(im, hdr, sebip_off=False, bias_off=False, exptime_off=False, desmear_off=False, calfac_off=False, calimg_off=False):
+def hi_correction(im, hdr, prepDir, sebip_off=False, bias_off=False, exptime_off=False, desmear_off=False, calfac_off=False, calimg_off=False):
     # Assuming valid header structure
     # Correct for SEB IP 
     if not sebip_off:
@@ -320,7 +313,7 @@ def hi_correction(im, hdr, sebip_off=False, bias_off=False, exptime_off=False, d
     if calimg_off:
         calimg = 1.0
     else:
-        calimg, chdr = get_calimg(hdr)
+        calimg, chdr = get_calimg(hdr, prepDir)
         hdr['history'] = 'Applied flat field'
         
     # Apply correction 
@@ -328,7 +321,7 @@ def hi_correction(im, hdr, sebip_off=False, bias_off=False, exptime_off=False, d
 
     return im, hdr
 
-def hi_prep(im, hdr):
+def hi_prep(im, hdr, prepDir):
     # Assuming proper header structure again
     det = hdr['DETECTOR']
     if det not in ['HI1', 'HI2']:
@@ -340,10 +333,10 @@ def hi_prep(im, hdr):
     
     # Calibration/correction
     # cosmic seems undefined on first pass then saved after for future calls?
-    im, hdr = hi_correction(im, hdr)
+    im, hdr = hi_correction(im, hdr, prepDir)
     
     # Update header with the best calibrated pointing
-    hdr = hi_fix_pointing(hdr)
+    hdr = hi_fix_pointing(hdr, prepDir)
     
     # Smooth mask - HI2 only and/or off
     

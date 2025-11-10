@@ -7,11 +7,8 @@ import spiceypy as spice
 import math
 from sunpy.coordinates import sun
 
-global scDict, pspOrbit
+global scDict
 scDict = {'sta':'-234', 'stereoa':'-234', 'stereoahead':'-234', 'stb':'-235', 'stereob':'-235', 'stereobehind':'-235', 'solo':'-144', 'solarorbiter':'-144', 'psp':'-96','parkersolarprobe':'-96', 'EARTH':'399', 'Earth':'399', 'earth':'399'}
-pspOrbit = ['/Users/kaycd1/ssw/psp/gen/data/spice/orbit/spp_nom_20180812_20250831_v040_RO7.bsp']
-spiceDir = {'psp':'/Users/kaycd1/ssw/psp/gen/data/spice'}
-
 
 def get_sunspyce_hpc_point(date, spacecraft, instrument=None, doDeg=False, doRad=False):
     # returns yaw (arcsec), pitch (arcsec), and roll angle (deg)

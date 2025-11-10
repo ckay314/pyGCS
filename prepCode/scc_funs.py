@@ -10,7 +10,7 @@ from sunspyce import get_sunspyce_roll, get_sunspyce_hpc_point
 # Hardcoded secchi backgrounds here  for now
 global secchi_bkg, gtFile
 secchi_bkg = '/Users/kaycd1/STEREObackgrounds/'
-gtFile = '/Users/kaycd1/ssw/stereo/secchi/data/gt/secchi_gtdbase.geny'
+#gtFile = '/Users/kaycd1/ssw/stereo/secchi/data/gt/secchi_gtdbase.geny'
 global mjd_epoch, idl_base_date
 mjd_epoch = datetime.datetime(1858, 11, 17, 0, 0, 0)
 idl_base_date = datetime.datetime(1979, 1, 1, 0, 0, 0) # needed for anytim matching
@@ -1203,10 +1203,10 @@ def scc_hi_diffuse(hdr, ipsum=None):
    
     return correct
     
-def scc_img_trim(im, hdr):
+def scc_img_trim(im, hdr, gtFile=None):
     # Check for un-reprocessed data
     if (hdr['DSTOP1'] < 1) or (hdr['DSTOP1'] > hdr['NAXIS1']) or  (hdr['DSTOP2'] > hdr['NAXIS2']):
-        im, hdr = precommcorrect(im, hdr)
+        im, hdr = precommcorrect(im, hdr, gtFile=gtFile )
     x1 = int(hdr['DSTART1']-1)
     x2 = int(hdr['DSTOP1']-1)
     y1 = int(hdr['DSTART2']-1)
@@ -1219,7 +1219,7 @@ def scc_img_trim(im, hdr):
     return img, hdr
             
             
-def precommcorrect(im, hdr):
+def precommcorrect(im, hdr, gtFile=None):
     # Apply IcerDiv2 correction
     if (hdr['comprssn'] > 89) & (hdr['comprssn'] < 102):
         if hdr['DIV2CORR'] == False:
@@ -1246,7 +1246,7 @@ def precommcorrect(im, hdr):
     
     # Correct image center
     if hdr['DETECTOR'] == 'EUVI':
-        hdr = euvi_point(hdr)
+        hdr = euvi_point(hdr, gtFile)
     else:
         sys.exit('COR point corrections not ported in precommcorrect')
     
@@ -1316,7 +1316,7 @@ def precommcorrect(im, hdr):
     
     
     
-def euvi_point(hdr):
+def euvi_point(hdr, gtFile):
     radeg = 180 / np.pi
     # assume passed a single header
     
@@ -1506,7 +1506,7 @@ def euvi_point(hdr):
     anytim = (t-idl_base_date).total_seconds() +  hdr['exptime'] + 2.0 # end exp + 2 sec
     dsun = hdr['dsun_obs'] / 1.496e11 # sun distance in AU
     fpsoff = [hdr['fpsoffy'], hdr['fpsoffz']] # FPS pointing offset
-    svecg = scc_gt2sunvec(anytim, dsun, fpsoff, obs_s)
+    svecg = scc_gt2sunvec(anytim, dsun, fpsoff, obs_s, gtFile)
     # rotate svec from GT to EUVI system
     svec = [svecg[0]*np.cos(grol) - svecg[1]*np.sin(grol), svecg[0]*np.sin(grol) + svecg[1]*np.cos(grol)] 
     
@@ -1628,7 +1628,7 @@ def euvi_point(hdr):
         
 
 
-def scc_gt2sunvec(anytim, sund, gtdata, obs, doRad=False):
+def scc_gt2sunvec(anytim, sund, gtdata, obs, gtFile, doRad=False):
     if obs.lower() == 'a':
         cc    = [[1.0000, 0.715e-8, 1.341e-5, 0.329e-8], [1.2843, 1.883e-7, 2.203e-4, 0.625e-7], [1.1739, 1.759e-6, 1.718e-3, 0.511e-6]]
         yrgain = (378./256.) * 1.100    # as of 2007-04-30
