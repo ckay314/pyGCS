@@ -39,6 +39,7 @@ def get_exp_factor(hdr, efacDir):
     if 'offset' in hdr:
         bias = hdr['offset']
     if os.path.exists(myDir+fn):
+        print (myDir+fn, hdr['filename']) 
         data = np.genfromtxt(myDir+fn, dtype=str)
         if hdr['filename'] in data[:,0]:
             idx = np.where(data[:,0] == hdr['filename'])[0]

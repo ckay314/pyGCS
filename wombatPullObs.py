@@ -380,6 +380,8 @@ def pullSTEREO(times, insts, EUVtime=10, CORtime=20, HItime=30, outFolder='pullF
         elif 'B' in insts[i]:
             insts[i] = insts[i].replace('B','')
             ABtoDo[insts[i]] = [1]
+        else:
+            ABtoDo[insts[i]] = [0,1]
             
     # Figure out which instruments we want since
     # process them differently
@@ -404,7 +406,7 @@ def pullSTEREO(times, insts, EUVtime=10, CORtime=20, HItime=30, outFolder='pullF
     # |--------- Searching ---------|
     # |-----------------------------|
     # Secchi doesn't like using Sample, randomly starts yeeting things so no files left
-    result = Fido.search(a.Time(startT, endT), a.Instrument.secchi)
+    result = Fido.search(a.Time(times[0], times[1]), a.Instrument.secchi)
     
             
     # |-----------------------------|
@@ -549,7 +551,7 @@ def pullSTEREO(times, insts, EUVtime=10, CORtime=20, HItime=30, outFolder='pullF
     if len(EUVIwav) > 0:
         if not waveIssue:
             for i in range(len(wavidx)):
-                for j in ABtoDo['EUVI'+EUVIwav[i]]:
+                for j in ABtoDo['EUVI'+str(EUVIwav[i])]:
                     idxs = wavidx[i][j]
                     if len(idxs) > 0:
                         print('Downloading STEREO EUVI'+ AB[j] + ' ' + str(EUVIwav[i]) + ' files...')
@@ -943,7 +945,7 @@ def commandLineWrapper():
     #|---- Check back end for optional args ----|
     toRm = 0
     for i in [-1,-2,-3,-4]:
-        if len(vals) > i:
+        if len(vals) > np.abs(i):
             val = vals[i]
             if 'EUVT' in val.upper():
                 EUVt = int(val.upper().replace('EUVT', ''))
@@ -960,7 +962,7 @@ def commandLineWrapper():
                         outFolder = val
                         toRm += 1
                     else:
-                        sys.exit('Cannot find output folder '+val)
+                        sys.exit('Cannot find output folder '+val +'. Possibly missing a t in a time tag?')
                     
     # |---- Remove the optional args ----|               
     if toRm > 0:

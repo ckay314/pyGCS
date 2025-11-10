@@ -313,7 +313,7 @@ def hi_correction(im, hdr, prepDir, sebip_off=False, bias_off=False, exptime_off
     if calimg_off:
         calimg = 1.0
     else:
-        calimg, chdr = get_calimg(hdr, prepDir)
+        calimg, chdr = get_calimg(hdr, prepDir+'calimg/')
         hdr['history'] = 'Applied flat field'
         
     # Apply correction 

@@ -273,6 +273,7 @@ def processAIA(times, wavs, inFolder='pullFolder/SDO/AIA/', outFolder='wbFits/SD
             # Make an array and sort alphabetically = time sorted      
             goodFiles[i] = np.sort(np.array(goodFiles[i]))
             # Pass to the prep scripts
+            print ('Running aia_prep, this may take some time...')
             ims = aia_prep(goodFiles[i], downSize=downSize)
             # If this is the first image add the instrument header to outlines
             if len(ims) > 0:
@@ -410,6 +411,8 @@ def processLASCO(times, insts, inFolder='pullFolder/SOHO/LASCO/', outFolder='wbF
                 ymd = hdrs[j]['DATE-OBS'].replace('/','')+'T'+hdrs[j]['TIME-OBS'].replace(':','')[:6]
                 fitsName = 'wbpro_lasco'+insts[i]+'_'+ymd+'.fits'
                 hdrs[j]['OBSRVTRY'] = 'SOHO'
+                hdrs[j].remove('HISTORY', remove_all=True, ignore_missing=True)
+                hdrs[j]['HISTORY'] = 'Offset_bias applied but header stripped bc made astropy angry'
                 # Save the fits file
                 fullOut = outFolder+insts[i]+'/'+fitsName
                 print (fullOut)
