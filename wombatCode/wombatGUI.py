@@ -441,6 +441,8 @@ class ParamWindow(QMainWindow):
             self.close()
         elif event.key() == QtCore.Qt.Key_Escape:
             sys.exit()
+        elif event.key() == QtCore.Qt.Key_S:
+            self.SBclicked()
             
     def s2b(self, x=None, b=None, dx=None, x0=None, myWF=None, widges=None):
         """
@@ -785,6 +787,10 @@ class ParamWindow(QMainWindow):
         #|------------------------------------| 
         #|-------- Save Fits Files -----------|
         #|------------------------------------|        
+        # Make sure dir exists first
+        if not os.path.exists('wbFits/reloads/'):
+            os.mkdir('wbFits/reloads/')
+            
         for j in toDo:
             aPW = pws[j]
             
@@ -793,7 +799,7 @@ class ParamWindow(QMainWindow):
                 # Make the name
                 fitsName = 'wombat_'+ aPW.satStuff[tidx]['DATEOBS'].replace(':','') + '_' +  aPW.satStuff[tidx]['MYTAG'].replace(' ','_') +'.fits'
                 # Check that it doesn't already exist
-                if not os.path.exists('wbfits/reloads/'+fitsName):
+                if not os.path.exists('wbFits/reloads/'+fitsName):
                     fitsdata = aPW.OGims[tidx].data               
                     fitshdr  = aPW.hdrs[tidx]
                 
@@ -805,7 +811,7 @@ class ParamWindow(QMainWindow):
                     # Write it    
                     print ('Saving fits file as wbfits/reloads/'+fitsName)
                     hdu = fits.PrimaryHDU(fitsdata, header=fitshdr)
-                    hdu.writeto('wbfits/reloads/'+fitsName, overwrite=True)
+                    hdu.writeto('wbFits/reloads/'+fitsName, overwrite=True)
         
     def MBclicked(self):
         """
@@ -1145,6 +1151,8 @@ class FigWindow(QWidget):
             self.close()
         elif event.key() == QtCore.Qt.Key_Escape:
             sys.exit()
+        elif event.key() == QtCore.Qt.Key_S:
+            mainwindow.SBclicked(singleSat=self.winidx)
     
     def back_changed(self,text):
         """
@@ -1214,7 +1222,7 @@ class FigWindow(QWidget):
         pix = [view_pos.x(), view_pos.y()]
         
         #|---- Print pix ----|
-        prefA = self.satStuff[self.tidx]['MYTAG'].replace('_','') + ' pix:'
+        prefA = self.satStuff[self.tidx]['MYTAG'].replace('_',' ') + ' pix:'
         print (prefA.rjust(25), str(int(pix[0])).rjust(8), str(int(pix[1])).rjust(8))
         
         #|---- Convert to ra/dec ----| 
@@ -1445,9 +1453,9 @@ class OverviewWindow(QWidget):
         
         #|---- Set up/name window ----|
         if type(screenXY) != type(None):
-            # Not sure why it sets too high using same delta for x and y
-            # but this at least positions nicely on laptop
-            self.setGeometry(screenXY[0] - 400 - 10, screenXY[1] - 100 - 10, 400, 400) 
+            # The positioning is being odd, might be testing with multiple
+            # monitors, semi giving up on nice pos for now
+            self.setGeometry( int(0.8*screenXY[0]),screenXY[1] , 400, 400) 
         self.setFixedSize(400, 400) 
         self.setWindowTitle('Polar View')
         
@@ -1614,7 +1622,7 @@ def makeNiceMMs(obsIn, satStuffs):
     pMMs = {'AIA':[[0.001,10,1], [99,99,99]], 'SECCHI_EUVI':[[0.001,10,1], [99,99,99]], 'LASCO_C2':[[15,1,15], [97,99,97]], 'LASCO_C3':[[40,1,10], [99,99,90]], 'SECCHI_COR1':[[30,1,10], [99,99,90]], 'SECCHI_COR2':[[20,1,10], [92,99,93]], 'SECCHI_HI1':[[1,40,1], [99.9,80,99.9]], 'SECCHI_HI2':[[1,40,1],[99.9,80,99.9]], 'WISPR_HI1':[[1,40,1], [99.9,80,99.9]], 'WISPR_HI2':[[1,40,1], [99.9,80,99.9]], 'SoloHI':[[1,40,1], [99.5,80,99.5]] }
     
     # Where the background sliders start (between 0 and 255)
-    sliVals = {'AIA':[[0,0,0], [191,191,191]], 'SECCHI_EUVI':[[0,32,0], [191,191,191]], 'LASCO_C2':[[0,0,21],[191,191,191]], 'LASCO_C3':[[37,0,37],[191,191,191]], 'SECCHI_COR1':[[63,0,21],[191,191,191]], 'SECCHI_COR2':[[63,0,21],[191,191,191]], 'SECCHI_HI1':[[0,0,21],[128,191,191]], 'SECCHI_HI2':[[0,0,21],[128,191,191]],  'WISPR_HI1':[[0,0,21],[128,191,191]], 'WISPR_HI2':[[0,0,21],[128,191,191]], 'SoloHI':[[0,0,21],[128,191,191]]}
+    sliVals = {'AIA':[[0,0,0], [191,191,191]], 'SECCHI_EUVI':[[0,32,0], [191,191,191]], 'LASCO_C2':[[0,0,21],[191,191,191]], 'LASCO_C3':[[37,0,37],[191,191,191]], 'SECCHI_COR1':[[63,0,21],[191,191,191]], 'SECCHI_COR2':[[63,0,21],[191,191,191]], 'SECCHI_HI1':[[63,0,21],[128,191,191]], 'SECCHI_HI2':[[63,0,21],[128,191,191]],  'WISPR_HI1':[[0,0,21],[128,191,191]], 'WISPR_HI2':[[0,0,21],[128,191,191]], 'SoloHI':[[0,0,21],[128,191,191]]}
     
     # Pull the configuration based on instrument
     myInst = satStuffs[0]['INST']

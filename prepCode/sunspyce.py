@@ -2,7 +2,6 @@ import numpy as np
 import sys
 from sunpy.time import parse_time
 import os
-import glob
 import spiceypy as spice
 import math
 from sunpy.coordinates import sun

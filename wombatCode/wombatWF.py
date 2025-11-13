@@ -50,7 +50,7 @@ bonusColors = ['#FF2056', '#9810FA', '#FFD230']
 # Attempting to keep theta to lon angle and phi to lat angle throughout WOMBAT
 # Everything is defined wrt to CK's Theoryland (which is Cartesian with 'nose' along x-axis
 # and largest non-radial width in the z/vertical direction for antisymmetric shapes)
-gridDict = {'GCS':[5,15,30], 'Torus':[30,25], 'Sphere':[50,25], 'Half Sphere':[25,25], 'Ellipse':[50,25], 'Half Ellipse':[25,25], 'Slab':[10,5,10]}
+gridDict = {'GCS':[5,15,25], 'Torus':[30,25], 'Sphere':[30,25], 'Half Sphere':[20,20], 'Ellipse':[30,25], 'Half Ellipse':[20,20], 'Slab':[10,5,10]}
 
 
 

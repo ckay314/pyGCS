@@ -31,10 +31,11 @@ Usage:
 
     where time1/2 are the start/end time formated anyway accepted by Sunpy parse_time
     and inst1->instN are N instrument tags, selecting from the options below with no
-    requirements on capital/lowercase letters. You can also pass two extra keywords
-    (represented by the three EXTRA) but these are not required. The three options are 
-    the difference mode (either RD or BD), tRes,  the time resolution in minutes to use 
-    for pulling (processed) observations, and nWF, the number of wireframes
+    requirements on capital/lowercase letters. You can also pass up to five extra keywords
+    (represented by the  EXTRA) but these are not required. The  options are the difference
+    mode (either RD or BD), T#,  the time resolution in minutes to use for pulling (processed)
+    observations, n#, the number of wireframes, diffEUV to flag to take EUV differences, and
+    ovw to include the overview panel.
 
 
         
@@ -80,7 +81,7 @@ import sunpy.map
 from sunpy.time import parse_time
 import sys, os
 
-
+sys.path.append('wombatCode/') 
 from wombatGUI import releaseTheWombat
 from wombatProcessObs import setupTimeStuff
 
@@ -580,7 +581,7 @@ def findFiles(timesIn, insts, nMax=20, obsFold='wbFits/', diffMode='RD', diffEUV
 # |------------------------------------------------------------|
 # |----------------------- Main Wrapper -----------------------|
 # |------------------------------------------------------------|
-def runWombat(args, overviewPlot=True):
+def runWombat(args):
     """
     Main wrapper to run the wombat gui from a list of arguments, either from an external
     program or by calling wombatPullObs.py at the command line
@@ -600,10 +601,6 @@ def runWombat(args, overviewPlot=True):
               list of prepped files or a reload file. Alternative, two time strings and a 
               set of instrument tags can be passed.
     
-    Optional Inputs:
-        overviewPlot: Set the GUI to show a window with a top down view of satellite locations
-                      Defaults to True
-    
     Examples:
         The most basic call is
 
@@ -613,35 +610,37 @@ def runWombat(args, overviewPlot=True):
 
         To launch mode 2 use
     
-              runWombat([time1 time2 inst1... instN EXTRA1 EXTRA2 EXTRA3])
+              runWombat([time1 time2 inst1... instN EXTRA1 EXTRA2 EXTRA3 EXTRA4 EXTRA5])
 
         where time1/2 are the start/end time formated anyway accepted by Sunpy parse_time
         and inst1->instN are N instrument tags, selecting from the options below with no
-        requirements on capital/lowercase letters. You can also pass three extra keywords
-        (represented by the three EXTRA) but these are not required. The three options are 
-        the difference mode (either RD or BD), T#,  the time resolution in minutes to use
-        for pulling (processed) observations, and n#, the number of wireframes
-                 Available inst tags:
-                        AIAnum  = SDO AIA where num represents a wavelength from [94, 131, 171*, 
-                                  193*, 211, 304*, 335, 1600, 1700] with * most common
-                        C2      = LASCO C2
-                        C3      = LASCO C3
-                        COR1    = STEREO COR1
-                        COR2    = STEREO COR2    
-                        EUVInum = STEREO EUVI where num is a wavelength from [171, 195, 284, 304]
-                        HI1     = STEREO HI1
-                        HI2     = STEREO H2
-                        SoloHI  = All quadrants from Solar Orbiter HI
-                        SoloHI1 = Quadrant 1 from Solar Orbiter HI
-                        SoloHI2 = Quadrant 2 from Solar Orbiter HI
-                        SoloHI3 = Quadrant 3 from Solar Orbiter HI
-                        SoloHI4 = Quadrant 4 from Solar Orbiter HI
-                        WISPR   = Both inner and outer from PSP WISPR
-                        WISPRI  = Inner only from PSP WISPR
-                        WISRPO  = Outer only from PSP WISPR
-                        * all STEREO values will both pull A and B (as available) if written as 
-                          above but one can add the A/B tag on the end (e.g. COR2A) to select a
-                          single STEREO
+        requirements on capital/lowercase letters. You can also pass up to five extra keywords
+        (represented by the  EXTRA) but these are not required. The  options are the difference
+        mode (either RD or BD), T#,  the time resolution in minutes to use for pulling (processed)
+        observations, n#, the number of wireframes, diffEUV to flag to take EUV differences, and
+        ovw to include the overview panel.
+
+        Available inst tags:
+            AIAnum  = SDO AIA where num represents a wavelength from [94, 131, 171*, 
+                        193*, 211, 304*, 335, 1600, 1700] with * most common
+            C2      = LASCO C2
+            C3      = LASCO C3
+            COR1    = STEREO COR1
+            COR2    = STEREO COR2    
+            EUVInum = STEREO EUVI where num is a wavelength from [171, 195, 284, 304]
+            HI1     = STEREO HI1
+            HI2     = STEREO H2
+            SoloHI  = All quadrants from Solar Orbiter HI
+            SoloHI1 = Quadrant 1 from Solar Orbiter HI
+            SoloHI2 = Quadrant 2 from Solar Orbiter HI
+            SoloHI3 = Quadrant 3 from Solar Orbiter HI
+            SoloHI4 = Quadrant 4 from Solar Orbiter HI
+            WISPR   = Both inner and outer from PSP WISPR
+            WISPRI  = Inner only from PSP WISPR
+            WISRPO  = Outer only from PSP WISPR
+            * all STEREO values will both pull A and B (as available) if written as 
+              above but one can add the A/B tag on the end (e.g. COR2A) to select a
+              single STEREO
     
 
            
@@ -663,8 +662,11 @@ def runWombat(args, overviewPlot=True):
     tRes = None
     toRm = 0
     nWFs  = 1 
+    diffEUV  = False
+    overviewPlot = False
+    
     if len(args) > 1:
-        for i in [-1,-2, -3]:
+        for i in [-1,-2, -3, -4, -5]:
             if len(args) > -i:
                 val = args[i].upper()
                 if val.upper() in ['BD', 'RD']:
@@ -677,6 +679,16 @@ def runWombat(args, overviewPlot=True):
                 elif 'N' in val:
                     nWFs = int(val.replace('N',''))
                     toRm += 1
+                # be nice to those that forget an f
+                elif val in ['DIFFEUV', 'DIFEUV']:
+                    diffEUV = True
+                    toRm += 1
+                # Dunno why anyone would write more than ovw but allow it
+                # ovw short and reminds CK of Al Snow
+                elif val in ['OVW', 'OVERVIEW', 'OVERVIEWWINDOW']:
+                    overviewPlot = True
+                    toRm += 1
+                
                 
     if toRm > 0:
         args = args[:-toRm]
@@ -717,7 +729,7 @@ def runWombat(args, overviewPlot=True):
         
         # Process obsList
         if preProc:
-            allFH = pullProcFiles(theFile)
+            allFH = pullProcFiles(theFile, diffEUV=diffEUV)
     
     # |-----------------------------------------------|
     # |--------- Process times/instruments -----------|
@@ -730,7 +742,7 @@ def runWombat(args, overviewPlot=True):
         while j < len(args):
             insts.append(args[j])
             j += 1
-        allFH = findFiles(times, insts, diffMode=diffMode,tRes=tRes)
+        allFH = findFiles(times, insts, diffMode=diffMode,tRes=tRes, diffEUV=diffEUV)
         
     # Exit if haven't been passed anything
     else:
@@ -742,4 +754,4 @@ def runWombat(args, overviewPlot=True):
     releaseTheWombat(allFH, reloadDict=reloadDict, overviewPlot=overviewPlot, nWFs=nWFs)   
         
 if __name__ == '__main__':
-    runWombat(sys.argv, overviewPlot=True)
+    runWombat(sys.argv)
