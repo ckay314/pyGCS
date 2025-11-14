@@ -922,6 +922,8 @@ def commandLineWrapper():
     
     #|---- Pull the command line args ----|
     vals = sys.argv[1:]
+    if vals[1] < vals[0]:
+        sys.exit('Exiting pullObs, start time is after end time...')
     
     #|---- Pull times and check format ----|
     try:
@@ -973,7 +975,7 @@ def commandLineWrapper():
         if val.upper() in tags:
             insts.append(val.upper().replace('SOLO', 'Solo'))  # adjust SoloHi format
     if len(insts) < 1:
-        sys.exit('No instrument tag provided')
+        sys.exit('No instrument tag provided. Got nothing to show.')
         
     pullObs(times, insts, EUVtime=EUVt, CORtime=CORt, HItime=HIt, outFolder=outFolder)    
             

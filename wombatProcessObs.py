@@ -1182,6 +1182,8 @@ def commandLineWrapper():
     
     #|---- Pull the command line args ----|
     vals = sys.argv[1:]
+    if vals[1] < vals[0]:
+        sys.exit('Exiting processObs, start time is after end time...')
     
     #|---- Pull times and check format ----|
     try:

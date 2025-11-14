@@ -186,12 +186,12 @@ def processReload(fileIn, reloadFold='wbfits/reloads/'):
                     diffs.append(diff)
                     hdrs.append(hdr)
                 else:
-                    sys.exit('Cannot find '+reloadFold+fitsname.replace(':','')+' Make sure it is in the correct folder.')
+                    sys.exit('processReload cannot find '+reloadFold+fitsname.replace(':','')+' Make sure it is in the correct folder.')
             allFH.append([diffs, hdrs])
         return allFH, reloadDict
         
     else:
-        sys.exit('Reload file not found, cannot launch')
+        sys.exit('Reload file not found by processReload, cannot launch')
 
 # |------------------------------------------------------------|
 # |--------------- Convert fits files to maps -----------------|
@@ -456,7 +456,7 @@ def findFiles(timesIn, insts, nMax=20, obsFold='wbFits/', diffMode='RD', diffEUV
         inst = inst.upper()
         # Check if it is a valid instrument key
         if inst not in allowedInsts:
-            sys.exit(inst+' not a valid instrument tag.')
+            sys.exit(inst+' not a valid instrument tag, exiting from findFiles.')
             
         # If so, add the path to the list we will pull from
         else:
@@ -737,6 +737,8 @@ def runWombat(args):
     elif len(args) >= 3:
         reloadDict = None
         times = [args[0],args[1]]
+        if times[1] < times[0]:
+            sys.exit('Exiting WOMBAT, start time is after end time...')
         insts = []
         j = 2
         while j < len(args):

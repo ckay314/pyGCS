@@ -1883,7 +1883,7 @@ def getSatStuff(imMap):
     # or deg/pix for HI
     # Check to make sure same in x/y since we will assume as much
     if (imMap.scale[0].to_value() != imMap.scale[1].to_value()):
-        sys.exit('xy scales not equilent. Not set up to handle this')    
+        sys.exit('xy scales not equilent. Not set up to handle this. Exiting from getSatStuff')    
     obsScl  = imMap.scale[0].to_value()
     satDict['SCALE'] = obsScl
     

@@ -6,6 +6,7 @@ import spiceypy as spice
 import math
 from sunpy.coordinates import sun
 
+
 global scDict
 scDict = {'sta':'-234', 'stereoa':'-234', 'stereoahead':'-234', 'stb':'-235', 'stereob':'-235', 'stereobehind':'-235', 'solo':'-144', 'solarorbiter':'-144', 'psp':'-96','parkersolarprobe':'-96', 'EARTH':'399', 'Earth':'399', 'earth':'399'}
 

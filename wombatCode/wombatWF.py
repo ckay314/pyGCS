@@ -224,7 +224,7 @@ class wireframe():
         self.showMe   = False
         if type(WFtype) != type(None):
             if WFtype not in npDict:
-                sys.exit('Unrecognized wireframe type. Exiting now... bye')
+                sys.exit('Unrecognized wireframe type. Exiting wireframe class iniation now... bye')
             self.nParams  = npDict[WFtype]
             self.WFcolor  = colorDict[WFtype]
             self.labels   = np.empty(self.nParams)
