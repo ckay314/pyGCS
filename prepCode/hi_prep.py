@@ -32,7 +32,6 @@ def hi_fix_pointing(hdr, prepDir, hipointfile=None, ravg=None, tvary=False):
         if ravg != None: rtmp = ravg
         
         # Get file name
-        idx = np.where(hdr['date-avg'] == 'T')[0]
         yymmdd = hdr['date-avg'][:10]
         if tvary:
             fle = myDir + 'pnt_' + hdr['detector'] + hdr['obsrvtry'][7] + '_' + yymmdd + '.fts'

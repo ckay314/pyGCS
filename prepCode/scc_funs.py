@@ -818,10 +818,11 @@ def scc_sebip(img, hdr):
     ipEnc = ip.encode(encoding='utf-8')
     byteIt = np.array([ipEnc[i] for i in range(60)]) 
     seb_ip = [chr(byteIt[i*3])+chr(byteIt[i*3+1])+chr(byteIt[i*3+2]) for i in range(20)]
-    
+
     # Trim SW images
-    x = np.where(seb_ip == '117')[0]
-    if len(x) != 0:
+    if '117' in seb_ip:
+    #x = np.where(seb_ip == '117')[0]
+    #if len(x) != 0:
         print ('Need to port this when hit proper test case (in scc_sebip)')
         print (Quit)
 
